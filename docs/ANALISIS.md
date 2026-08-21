@@ -409,11 +409,58 @@ como lo hace `TERMO.hpprgm` y lo compara con el motor. Un desfase de una fila
 aparece aquí, en el PC, y no en el examen. Verifica además que ningún valor
 pierde precisión al serializarse (peor desviación relativa < 1e-15).
 
-### Lo que falta: aceptación
+### Aceptación — `tests/test_aceptacion.py` (15 comprobaciones, en verde)
 
-Los 3-5 problemas resueltos de la asignatura **todavía no se han pasado**: no
-los tengo. Es el único paso que decide si la app sirve, así que conviene
-hacerlo antes de usarla en un examen (ver README).
+Problemas del Tema 1 de *«Termodinàmica. Tests i problemes»* (ETSEIB-UPC, 2025)
+con su solución oficial. Los enunciados marcados «Taules individualitzades»
+usan exactamente estas tablas. Desviaciones de **0,002 % a 0,42 %**.
+
+**Encontró dos fallos que los otros 1216 tests no podían ver**, porque los dos
+eran de concepto y no de transcripción — justo lo que advertía el planteamiento
+inicial sobre implementar el mismo algoritmo dos veces:
+
+**1. No se contemplaba la región supercrítica.** Por encima de P_c no hay curva
+de saturación, así que comparar contra T_sat no tiene sentido y el motor se
+caía con *«fuera del rango tabulado»*. Afectaba a **30 isóbaras de 6
+sustancias**, 14 de ellas del agua (25 a 100 MPa): presiones de ciclo Rankine
+supercrítico, nada exótico. Ahora hay una región propia y las isóbaras se leen
+sin exigir fase.
+
+Con P < P_c y T > T_c el estado es vapor sobrecalentado corriente, no
+supercrítico: la región la decide **la presión**. Confundirlo rompió un test de
+enrutado y sirvió para acotarlo bien.
+
+**2. `v` se interpolaba linealmente en P.** En un gas *v ≈ ZRT/P*, o sea casi
+hiperbólica: entre isóbaras muy separadas la recta se aleja mucho. Medido sobre
+estas tablas:
+
+| Separación P₂/P₁ | Diferencia media | Máxima |
+|---|---|---|
+| < 1,25 | 0,39 % | 1,04 % |
+| 1,25 – 1,5 | 1,36 % | 4,52 % |
+| 1,5 – 2 | 4,05 % | 8,27 % |
+| > 2 | **14,99 %** | **79,21 %** |
+
+El caso que lo destapó: amoníaco a 2,5 MPa, donde **el PDF salta de 1,8 a
+3,0 MPa**. La recta daba 0,9952 dm³/mol frente a los 0,9202 oficiales (8 %);
+interpolando en 1/P sale 0,9194 — **0,09 %**.
+
+Así que `v` se interpola en 1/P y *u*, *h*, *s* siguen lineales, que varían
+poco con P a T constante. Con isóbaras contiguas —el caso normal— la diferencia
+es inferior al 1 %, así que no altera nada de lo que ya funcionaba.
+
+> Matiz sobre el criterio de «reproducir la interpolación lineal hecha a mano»:
+> sigue valiendo dentro de cada isóbara y para las magnitudes energéticas. Pero
+> la solución oficial **no** interpola `v` linealmente entre isóbaras lejanas,
+> y el objetivo siempre fue reproducir esa solución, no la recta.
+
+### Un caso donde ni la app ni el método coinciden con el oficial
+
+En el problema 1.2 —agua a 5 bar con v = 1/970— sale 82,25 °C frente a los
+81,9 oficiales. No es un fallo: en esa zona el PDF da `v` con seis decimales y
+dv/dT ≈ 6,8·10⁻⁷, así que **medio dígito de redondeo vale 0,7 °C**. La masa que
+daría exactamente 81,9 °C es 970,2 kg. Los dos valores son el mismo punto para
+lo que estas tablas pueden resolver.
 
 ---
 

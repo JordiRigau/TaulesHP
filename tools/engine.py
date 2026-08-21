@@ -24,7 +24,11 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from model import load, PROPS
 
 LIQUID, MIX, VAPOR = 'LIQUID', 'MIX', 'VAPOR'
-REGION_ES = {LIQUID: 'Liq.comprimido', MIX: 'Bifasico', VAPOR: 'Vapor sobrecal.'}
+# Por encima de la presion critica no hay curva de saturacion ni dos fases:
+# el estado es supercritico y la isobara es continua de arriba abajo.
+SUPER = 'SUPER'
+REGION_ES = {LIQUID: 'Liq.comprimido', MIX: 'Bifasico',
+             VAPOR: 'Vapor sobrecal.', SUPER: 'Supercritico'}
 
 
 class FueraDeRango(Exception):
@@ -132,6 +136,37 @@ def iso_at_T(b, T, phase):
     return _interp_rows(rows, 'T', T, PROPS)
 
 
+def iso_at_T_any(b, T):
+    """Interpola dentro de una isobara sin exigir una fase concreta.
+
+    Se usa por encima de la presion critica, donde no hay salto de fase y la
+    isobara es una sola rama continua. Si la isobara SI tiene salto (caso de
+    una vecina subcritica al interpolar en P), se elige la rama que contiene
+    esa T, que es la unica con sentido fisico.
+    """
+    liq, vap = branches(b)
+    for rows in (liq, vap):
+        if (len(rows) >= 2 and rows[0]['T'] - 1e-9 <= T <= rows[-1]['T'] + 1e-9):
+            return _interp_rows(rows, 'T', T, PROPS)
+    if len(b['rows']) >= 2:
+        return _interp_rows(b['rows'], 'T', T, PROPS)
+    raise FueraDeRango('la isobara %g MPa no cubre T=%g' % (b['P'], T))
+
+
+def is_supercritical(sub, P):
+    """Por encima de P_c no hay curva de saturacion."""
+    return sub['Pc_MPa'] is not None and P > sub['Pc_MPa']
+
+
+def is_supercritical_T(sub, T):
+    """Por encima de T_c tampoco: la tabla de saturacion acaba en el punto
+    critico, asi que a esa T no hay ni liquido ni vapor que comparar."""
+    if sub['Tc_K'] is None:
+        return False
+    Tk = T + 273.15 if sub['T_unit'] == 'C' else T
+    return Tk > sub['Tc_K']
+
+
 def bracket_isobars(sub, P):
     """Isobaras que encierran P. Si P coincide con una tabulada, devuelve una."""
     bs = sub['isobars']
@@ -143,6 +178,29 @@ def bracket_isobars(sub, P):
             return [bs[i]]
     i = _bracket(Ps, P)
     return [bs[i], bs[i + 1]]
+
+
+def _mix_P(P, p0, p1, r0, r1):
+    """Combina dos isobaras a la presion P.
+
+    v se interpola en 1/P y no en P. En un gas v ~ ZRT/P, o sea casi
+    hiperbolica: entre isobaras muy separadas la recta se aleja mucho. Medido
+    sobre estas tablas, con isobaras contiguas (P2/P1 < 1,25) las dos formas
+    diferen menos del 1 %, pero con P2/P1 > 2 la diferencia llega al 79 %.
+
+    El caso que lo destapo: amoniaco a 2,5 MPa, donde el PDF salta de 1,8 a
+    3,0 MPa. Lineal en P da 0,9952 dm3/mol y la solucion oficial es 0,9202;
+    en 1/P sale 0,9194, que es la buena.
+
+    u, h y s se quedan lineales: varian poco con P a T constante y ahi la
+    recta es lo correcto.
+    """
+    out = {}
+    for k in PROPS:
+        out[k] = _lin(P, p0, p1, r0[k], r1[k])
+    if p0 > 0 and p1 > 0 and P > 0:
+        out['v'] = _lin(1.0 / P, 1.0 / p0, 1.0 / p1, r0['v'], r1['v'])
+    return out
 
 
 def single_phase_at_PT(sub, P, T, phase, avisos):
@@ -159,20 +217,23 @@ def single_phase_at_PT(sub, P, T, phase, avisos):
     es la frontera fisica correcta, y se avisa en pantalla.
     """
     bs = bracket_isobars(sub, P)
+    if phase == SUPER:
+        lee = lambda b: iso_at_T_any(b, T)
+    else:
+        lee = lambda b: iso_at_T(b, T, phase)
     if len(bs) == 1:
-        return iso_at_T(bs[0], T, phase)
+        return lee(bs[0])
 
     pts = []
     for b in bs:
         try:
-            r = iso_at_T(b, T, phase)
-            pts.append((b['P'], r))
+            pts.append((b['P'], lee(b)))
         except FueraDeRango:
             pts.append((b['P'], None))
 
     if all(r is not None for _, r in pts):
         (p0, r0), (p1, r1) = pts
-        return dict((k, _lin(P, p0, p1, r0[k], r1[k])) for k in PROPS)
+        return _mix_P(P, p0, p1, r0, r1)
 
     # Una vecina no tiene la fase pedida a esa T: se usa la frontera de
     # saturacion a esa misma T como punto de apoyo.
@@ -187,7 +248,7 @@ def single_phase_at_PT(sub, P, T, phase, avisos):
     (p1, r1) = bnd
     if abs(p1 - p0) < 1e-12:
         return r0
-    return dict((k, _lin(P, p0, p1, r0[k], r1[k])) for k in PROPS)
+    return _mix_P(P, p0, p1, r0, r1)
 
 
 # ------------------------------------------------------------------- estados
@@ -211,6 +272,16 @@ def _fill_mix(st, sat, x, Tkey='T'):
 def state_PT(sub, P, T):
     """Par (P,T). Ambiguo justo en saturacion: ahi hace falta ademas x."""
     st = _state(sub, P=P, T=T)
+    if is_supercritical(sub, P):
+        # Por encima de P_c no hay curva de saturacion: nada que comparar, se
+        # va directo a la isobara. Ojo: con P < P_c y T > T_c el estado es
+        # vapor sobrecalentado corriente, no supercritico, y ese caso lo
+        # resuelve bien el camino normal.
+        st['region'] = SUPER
+        r = single_phase_at_PT(sub, P, T, SUPER, st['avisos'])
+        for k in PROPS:
+            st[k] = r[k]
+        return st
     sat = sat_at_P(sub, P)
     Tb, Td = sat['Tl'], sat['Tv']          # burbuja y rocio (iguales si es pura)
     if T < Tb - 1e-9:
@@ -257,9 +328,18 @@ def state_Py(sub, P, prop, y):
       y_f <= y <= y_g    -> bifasico -> x = (y - y_f)/(y_g - y_f), directo
       y > y_g            -> vapor sobrecalentado -> inversa dentro de la isobara
     """
+    st = _state(sub, P=P)
+    if is_supercritical(sub, P):
+        st['region'] = SUPER
+        T = invert_in_P(sub, P, prop, y, SUPER, st['avisos'])
+        st['T'] = T
+        r = single_phase_at_PT(sub, P, T, SUPER, st['avisos'])
+        for k in PROPS:
+            st[k] = r[k]
+        st[prop] = y
+        return st
     sat = sat_at_P(sub, P)
     yf, yg = sat[prop + 'l'], sat[prop + 'v']
-    st = _state(sub, P=P)
     if yf <= y <= yg:
         x = (y - yf) / (yg - yf) if yg != yf else 0.0
         st['T'] = sat['Tl'] + x * (sat['Tv'] - sat['Tl'])
@@ -286,8 +366,11 @@ def invert_in_P(sub, P, prop, y, phase, avisos):
     bs = bracket_isobars(sub, P)
     lo_c, hi_c = [], []
     for b in bs:
-        liq, vap = branches(b)
-        rows = liq if phase == LIQUID else vap
+        if phase == SUPER:
+            rows = b['rows']
+        else:
+            liq, vap = branches(b)
+            rows = liq if phase == LIQUID else vap
         if len(rows) >= 2:
             lo_c.append(rows[0]['T'])
             hi_c.append(rows[-1]['T'])
@@ -317,9 +400,21 @@ def invert_in_P(sub, P, prop, y, phase, avisos):
 # ---- (T, y) ---------------------------------------------------------------
 def state_Ty(sub, T, prop, y):
     """Par (T, propiedad). Enrutado analogo, con la tabla indexada por T."""
+    st = _state(sub, T=T)
+    if is_supercritical_T(sub, T):
+        # A T > T_c la tabla de saturacion se acaba, asi que no hay y_f ni y_g
+        # con los que decidir. Se invierte directamente sobre las isobaras y
+        # la region la marca despues la presion obtenida.
+        P = invert_in_T(sub, T, prop, y, SUPER, st['avisos'])
+        st['P'] = P
+        st['region'] = SUPER if is_supercritical(sub, P) else VAPOR
+        r = single_phase_at_PT(sub, P, T, SUPER, st['avisos'])
+        for k in PROPS:
+            st[k] = r[k]
+        st[prop] = y
+        return st
     sat = sat_at_T(sub, T)
     yf, yg = sat[prop + 'l'], sat[prop + 'v']
-    st = _state(sub, T=T)
     if yf <= y <= yg:
         x = (y - yf) / (yg - yf) if yg != yf else 0.0
         st['P'] = sat['Pl'] + x * (sat['Pv'] - sat['Pl'])
@@ -340,7 +435,10 @@ def invert_in_T(sub, T, prop, y, phase, avisos):
     cand = []
     for b in sub['isobars']:
         try:
-            cand.append((b['P'], iso_at_T(b, T, phase)[prop]))
+            if phase == SUPER:
+                cand.append((b['P'], iso_at_T_any(b, T)[prop]))
+            else:
+                cand.append((b['P'], iso_at_T(b, T, phase)[prop]))
         except FueraDeRango:
             continue
     if len(cand) < 2:

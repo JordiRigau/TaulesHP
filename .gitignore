@@ -3,6 +3,8 @@
 # cifras extraidas, o sea su contenido integro. El repositorio publica el
 # codigo; quien tenga el PDF regenera los datos con un comando.
 Tablas_propiedades_individualizadas.pdf
+Termodin*_Test_Problemes_*.pdf
+work_probs.txt
 data/
 
 # ficheros PPL que llevan los datos dentro

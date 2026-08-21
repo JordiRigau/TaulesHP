@@ -162,12 +162,19 @@ BEGIN
   LOCAL zrbase, znn, znl, zii, zf, zres;
   LOCAL zj;
   zrbase := TIX(zk,2); znn := TIX(zk,3); znl := TIX(zk,4);
+  // fase: 0 = liquid, 1 = vapor, 2 = tota la isobara (per sobre del punt
+  // critic no hi ha salt de fase i la isobara es una sola branca)
   IF zph == 0 THEN
     IF znl < 2 THEN RETURN {}; END;
     zii := TBRK(TIS, 1, zt, zrbase, znl);
-  ELSE
+  END;
+  IF zph == 1 THEN
     IF znn - znl < 2 THEN RETURN {}; END;
     zii := TBRK(TIS, 1, zt, zrbase + znl, znn - znl);
+  END;
+  IF zph == 2 THEN
+    IF znn < 2 THEN RETURN {}; END;
+    zii := TBRK(TIS, 1, zt, zrbase, znn);
   END;
   IF zii == 0 THEN RETURN {}; END;
   zf := TLIN(zt, TIS(zii,1), TIS(zii+1,1), 0, 1);
@@ -176,6 +183,19 @@ BEGIN
     zres(zj-1) := TIS(zii,zj) + zf * (TIS(zii+1,zj) - TIS(zii,zj));
   END;
   RETURN zres;
+END;
+
+// Llegeix una isobara sense exigir fase. S'usa per sobre del punt critic.
+// Si la isobara SI te salt (una veina subcritica), s'agafa la branca que
+// conte aquesta T, que es l'unica amb sentit fisic.
+EXPORT TISOA(zk, zt)
+BEGIN
+  LOCAL zr;
+  zr := TISOT(zk, zt, 0);
+  IF SIZE(zr) == 4 THEN RETURN zr; END;
+  zr := TISOT(zk, zt, 1);
+  IF SIZE(zr) == 4 THEN RETURN zr; END;
+  RETURN TISOT(zk, zt, 2);
 END;
 
 // Doble interpolacio: primer en T dins de cada isobara, despres en P.
@@ -211,14 +231,22 @@ BEGIN
   zk := TBRK(TIX, 1, zp, 1, zm);
   IF zk == 0 THEN TERR := "P fora de rang (isobares)"; RETURN {}; END;
   za := TIX(zk,1); zb := TIX(zk+1,1);
-  zra := TISOT(zk, zt, zph);
-  zrb := TISOT(zk+1, zt, zph);
+  IF zph == 2 THEN
+    zra := TISOA(zk, zt); zrb := TISOA(zk+1, zt);
+  ELSE
+    zra := TISOT(zk, zt, zph); zrb := TISOT(zk+1, zt, zph);
+  END;
 
   IF SIZE(zra) == 4 AND SIZE(zrb) == 4 THEN
     zres := {};
     FOR zj FROM 1 TO 4 DO
       zres(zj) := TLIN(zp, za, zb, zra(zj), zrb(zj));
     END;
+    // v s'interpola en 1/P, no en P: en un gas v ~ ZRT/P, gairebe
+    // hiperbolica. Amb isobares contigues les dues formes diferen menys
+    // de l'1 %, pero amb un salt gran (amoniac: el PDF va d'1,8 a 3,0 MPa)
+    // la recta s'equivoca un 8 %. u, h i s es queden lineals.
+    zres(1) := TLIN(1/zp, 1/za, 1/zb, zra(1), zrb(1));
     RETURN zres;
   END;
 
@@ -236,11 +264,13 @@ BEGIN
   IF SIZE(zra) == 4 THEN
     zres := {};
     FOR zj FROM 1 TO 4 DO zres(zj) := TLIN(zp, za, zpsat, zra(zj), zrsat(zj)); END;
+    zres(1) := TLIN(1/zp, 1/za, 1/zpsat, zra(1), zrsat(1));
     RETURN zres;
   END;
   IF SIZE(zrb) == 4 THEN
     zres := {};
     FOR zj FROM 1 TO 4 DO zres(zj) := TLIN(zp, zb, zpsat, zrb(zj), zrsat(zj)); END;
+    zres(1) := TLIN(1/zp, 1/zb, 1/zpsat, zrb(1), zrsat(1));
     RETURN zres;
   END;
   TERR := "cap isobara veina te aquesta fase a aquesta T";
@@ -255,6 +285,15 @@ EXPORT TPT(zp, zt)
 BEGIN
   LOCAL zsa, zreg, zr, zav;
   TERR := "";
+  // Per sobre de la pressio critica no hi ha corba de saturacio: no hi ha res
+  // a comparar i s'ha d'anar directe a la isobara. Regio 3 = supercritic.
+  // Compte: amb P < Pc i T > Tc l'estat es vapor sobreescalfat corrent, i
+  // aquest cas el resol be el cami normal.
+  IF TMD(5) > 0 AND zp > TMD(5) THEN
+    zr := TSPH(zp, zt, 2);
+    IF SIZE(zr) == 0 THEN RETURN {0,0,0,0,0,0,0,-1,TERR}; END;
+    RETURN {zt, zp, zr(1), zr(2), zr(3), zr(4), -1, 3, TERR};
+  END;
   zsa := TSATP(zp);
   IF SIZE(zsa) == 0 THEN RETURN {0,0,0,0,0,0,0,-1,TERR}; END;
   IF zt < zsa(1) - 1E-9 THEN zreg := 0;
@@ -335,7 +374,10 @@ BEGIN
   LOCAL zm, zk, zkaa, zkbb, zkk, zph;
   LOCAL zlo, zhi, zii, zrr, zflo, zfhi;
   LOCAL zmid, zfm, zit, zd;
-  zph := IFTE(zreg == 0, 0, 1);
+  // zreg: 0 liquid, 2 vapor, 3 supercritic -> fase 0, 1 o 2
+  zph := 1;
+  IF zreg == 0 THEN zph := 0; END;
+  IF zreg == 2 THEN zph := 2; END;
   zd := DIM(TIX); zm := zd(1);
   // Se acota con LAS MISMAS isobaras que usara el calculo directo (las que
   // encierran P, o la exacta si esta tabulada). Usar mas isobaras estrecharia
@@ -358,9 +400,16 @@ BEGIN
         zlo := MAX(zlo, TIS(zii,1));
         zhi := MIN(zhi, TIS(zii + TIX(zkk,4) - 1, 1));
       END;
-    ELSE
+    END;
+    IF zph == 1 THEN
       IF TIX(zkk,3) - TIX(zkk,4) >= 2 THEN
         zlo := MAX(zlo, TIS(zii + TIX(zkk,4), 1));
+        zhi := MIN(zhi, TIS(zii + TIX(zkk,3) - 1, 1));
+      END;
+    END;
+    IF zph == 2 THEN
+      IF TIX(zkk,3) >= 2 THEN
+        zlo := MAX(zlo, TIS(zii,1));
         zhi := MIN(zhi, TIS(zii + TIX(zkk,3) - 1, 1));
       END;
     END;
@@ -392,15 +441,27 @@ BEGIN
   LOCAL zsa, zyf, zyg, zx, zp, zr;
   LOCAL zreg, zav, zm, zk, zylo, zyhi;
   LOCAL zplo, zphi, zrr, zgot, zd, zout;
+  LOCAL zfa;
   TERR := "";
-  zsa := TSATT(zt);
-  IF SIZE(zsa) == 0 THEN RETURN {0,0,0,0,0,0,0,-1,TERR}; END;
-  zyf := zsa(1 + 2*zpr); zyg := zsa(2 + 2*zpr);
-  IF zy >= zyf AND zy <= zyg THEN
-    IF zyg == zyf THEN zx := 0; ELSE zx := (zy - zyf) / (zyg - zyf); END;
-    RETURN TTX(zt, zx);
+  // Per sobre de la temperatura critica la taula de saturacio s'acaba: no hi
+  // ha y_f ni y_g amb que decidir la regio. S'inverteix directament sobre les
+  // isobares i la regio la marca despres la pressio que surti.
+  zreg := -9;
+  IF TMD(4) > 0 AND TTOK(zt) > TMD(4) THEN zreg := 3; END;
+  IF zreg == -9 THEN
+    zsa := TSATT(zt);
+    IF SIZE(zsa) == 0 THEN RETURN {0,0,0,0,0,0,0,-1,TERR}; END;
+    zyf := zsa(1 + 2*zpr); zyg := zsa(2 + 2*zpr);
+    IF zy >= zyf AND zy <= zyg THEN
+      IF zyg == zyf THEN zx := 0; ELSE zx := (zy - zyf) / (zyg - zyf); END;
+      RETURN TTX(zt, zx);
+    END;
+    IF zy < zyf THEN zreg := 0; ELSE zreg := 2; END;
   END;
-  IF zy < zyf THEN zreg := 0; ELSE zreg := 2; END;
+  // fase amb que es llegeix cada isobara: 0 liquid, 1 vapor, 2 sense exigir
+  zfa := 1;
+  IF zreg == 0 THEN zfa := 0; END;
+  IF zreg == 3 THEN zfa := 2; END;
   // es recorren les isobares que tenen aquesta fase a aquesta T i es
   // busca el tram de P on y canvia de banda
   // El resultat s'acumula a zout i es retorna DESPRES del bucle: PPL no
@@ -408,17 +469,20 @@ BEGIN
   zd := DIM(TIX); zm := zd(1); zgot := 0; zplo := 0; zylo := 0;
   zout := {};
   FOR zk FROM 1 TO zm DO
-    zrr := TISOT(zk, zt, IFTE(zreg == 0, 0, 1));
+    IF zfa == 2 THEN zrr := TISOA(zk, zt); ELSE zrr := TISOT(zk, zt, zfa); END;
     IF SIZE(zrr) == 4 THEN
       zphi := TIX(zk,1); zyhi := zrr(zpr);
       IF zgot == 1 THEN
         IF (zylo - zy) * (zyhi - zy) <= 0 THEN
           zp := TLIN(zy, zylo, zyhi, zplo, zphi);
-          zr := TSPH(zp, zt, IFTE(zreg == 0, 0, 1));
+          zr := TSPH(zp, zt, zfa);
           zav := TERR;
           IF SIZE(zr) == 0 THEN
             zout := {0,0,0,0,0,0,0,-1,TERR};
           ELSE
+            // per sobre de Tc pero amb P per sota de Pc l'estat es vapor
+            // sobreescalfat corrent, no supercritic
+            IF zreg == 3 AND TMD(5) > 0 AND zp <= TMD(5) THEN zreg := 2; END;
             zout := {zt, zp, zr(1), zr(2), zr(3), zr(4), -1, zreg, zav};
           END;
           BREAK;

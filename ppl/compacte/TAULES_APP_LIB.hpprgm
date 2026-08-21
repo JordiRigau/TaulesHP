@@ -66,6 +66,7 @@ BEGIN
   // correcte per al calcul, pero en pantalla x=0 i x=1 son les fronteres i
   // convé dir-ho amb aquest nom: si no, un vapor saturat surt com "bifasic".
   zreg := "VAPOR SOBREESCALFAT";
+  IF zst(8) == 3 THEN zreg := "SUPERCRITIC"; END;
   IF zst(8) == 0 THEN zreg := "LIQUID COMPRIMIT"; END;
   IF zst(8) == 1 THEN zreg := "BIFASIC"; END;
   IF zst(8) == 1 AND zst(7) <= 1E-9 THEN zreg := "LIQUID SATURAT  x=0"; END;
@@ -101,7 +102,7 @@ BEGIN
   // Context de saturacio: quanta T separa l'estat de la campana. D'un cop
   // d'ull es veu si s'esta a prop de la frontera, que es on cal anar amb
   // compte i on la interpolacio es mes delicada.
-  IF zst(8) <> 1 THEN
+  IF zst(8) <> 1 AND zst(8) <> 3 THEN
     zsa := TSATP(zst(2));
     IF SIZE(zsa) == 10 THEN
       IF zst(8) == 2 THEN

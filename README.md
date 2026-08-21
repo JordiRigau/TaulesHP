@@ -69,9 +69,23 @@ a 0,15 MPa y 115 °C el agua es vapor, pero la isóbara de 0,20 MPa da líquido 
 esa misma temperatura. Interpolar entre ambas daría un número absurdo con pinta
 de razonable.
 
-**1216 pruebas**: 208 del motor contra nodos tabulados y tablas publicadas, y
-1008 de la capa de datos PPL, que replica la aritmética de índices de la
-calculadora para cazar desfases de una fila **en el PC y no en el examen**.
+**1231 pruebas** en tres niveles: 208 del motor contra nodos tabulados y tablas
+publicadas, 1008 de la capa de datos PPL —que replica la aritmética de índices
+de la calculadora para cazar desfases de una fila **en el PC y no en el
+examen**— y **15 de aceptación contra los problemas resueltos de la
+asignatura**.
+
+**La prueba de aceptación encontró dos fallos que los otros 1216 tests no
+podían ver**, porque ambos eran de concepto y no de transcripción:
+
+1. **Por encima de la presión crítica no hay curva de saturación**, y la
+   determinación de región se caía. Afectaba a 30 isóbaras de 6 sustancias,
+   14 de ellas del agua (25 a 100 MPa) — presiones de ciclo Rankine
+   supercrítico, nada exótico.
+2. **`v` se interpolaba linealmente en P.** En un gas *v ≈ ZRT/P*, casi
+   hiperbólica. Con isóbaras contiguas da igual (<1 %), pero el amoníaco a
+   2,5 MPa —donde el PDF salta de 1,8 a 3,0— daba **8 % de error**.
+   Interpolando en 1/P la desviación baja a 0,09 %.
 
 **El port a PPL, documentado**: cinco intentos hasta dar con el límite de
 variables por `LOCAL`, con las cuatro hipótesis falsas que se descartaron por el
@@ -139,7 +153,7 @@ Restricciones reales de PPL que dieron forma al diseño, todas documentadas en
 | Motor de referencia en Python | ✅ 208 pruebas en verde |
 | Capa de datos PPL (índices, ramas) | ✅ 1008 pruebas en verde |
 | Código PPL en la calculadora | ✅ funcionando en G2, firmware 2.4.15515 |
-| Prueba de aceptación con problemas de clase | ⚠️ pendiente (hacen falta los enunciados) |
+| Prueba de aceptación con problemas de la asignatura | ✅ 15 comprobaciones en verde |
 
 ---
 
