@@ -11,6 +11,8 @@ independientes:
      completo a este proyecto.
   C. Comportamiento exigido en los limites: x=0, x=1, fuera de rango,
      vecina en otra fase.
+  D. El calculo a mano, rehecho aparte del motor. La app promete dar lo mismo
+     que sale con lapiz en el examen, asi que eso hay que comprobarlo.
 """
 from __future__ import unicode_literals
 import os, sys
@@ -194,12 +196,146 @@ def test_neighbour_other_phase():
                               st['v'], sat['vv']))
 
 
+def test_reproduce_la_interpolacion_a_mano():
+    """La app debe dar EXACTAMENTE lo que sale interpolando a mano.
+
+    Es el compromiso central del proyecto y va por delante de la exactitud:
+    el numero tiene que poder justificarse en el papel del examen. Asi que
+    todas las magnitudes, v incluida, se interpolan linealmente, primero en T
+    dentro de cada isobara y despues en P entre isobaras.
+
+    Aqui se rehace ese calculo a mano, aparte del motor, y se exige
+    coincidencia a 1e-9. Si alguien vuelve a meter v en 1/P -- que es mas
+    exacto pero ya no es lo que hace el alumno -- esta prueba lo caza.
+
+    El coste esta medido y acotado en _mix_P: donde el PDF pega un salto de
+    mas del doble (35 pares de 214) la recta se separa del valor real.
+    """
+    casos = [('AIGUA', 1.3, 375.0), ('AIGUA', 4.7, 500.0),
+             ('AMONIAC', 2.5, 66.85), ('R134A', 0.17, 40.0),
+             ('META', 1.5, 250.0), ('PROPA', 0.35, 320.0),
+             ('DIOXIDDECARBONI', 1.7, 320.0), ('ETA', 3.2, 310.0)]
+    for clave, P, T in casos:
+        sub = E.get(clave)
+        bs = E.bracket_isobars(sub, P)
+        # el caso tiene sentido solo si P cae ENTRE dos isobaras
+        if len(bs) != 2:
+            FAIL.append('%-58s %s %s MPa esta tabulada'
+                        % ('el caso debe caer entre dos isobaras', clave, P))
+            continue
+        b0, b1 = bs
+
+        # a mano: en T dentro de cada isobara, despues en P entre las dos
+        f = 1 if E.branches(b0)[1] and E.branches(b1)[1] else 0
+        r0 = E._interp_rows(E.branches(b0)[f], 'T', T, E.PROPS)
+        r1 = E._interp_rows(E.branches(b1)[f], 'T', T, E.PROPS)
+        a_ma = dict((k, E._lin(P, b0['P'], b1['P'], r0[k], r1[k]))
+                    for k in E.PROPS)
+
+        st = E.state_PT(sub, P, T)
+        for k in E.PROPS:
+            d = abs(st[k] - a_ma[k])
+            rel = d / abs(a_ma[k]) if a_ma[k] else d
+            (PASS if rel < 1e-9 else FAIL).append(
+                '%-58s %s %s MPa %s: %s vs %s'
+                % ('%s a ma i a la app han de coincidir' % k,
+                   clave, P, T, st[k], a_ma[k]))
+
+
+def test_coste_de_interpolar_v_lineal():
+    """Deja anotado lo que cuesta reproducir el metodo a mano.
+
+    No es un fallo: es la consecuencia conocida de la decision. Si el PDF
+    cambiara y los huecos se hicieran mayores, esta prueba lo avisaria.
+    """
+    def lin(x, x0, x1, y0, y1):
+        return y0 if x1 == x0 else y0 + (x - x0) * (y1 - y0) / (x1 - x0)
+
+    juntas, separadas, huecos = [], [], 0
+    for sub in E.substances().values():
+        bs = sorted(sub['isobars'], key=lambda b: b['P'])
+        for j in range(len(bs) - 1):
+            b0, b1 = bs[j], bs[j + 1]
+            if b0['P'] <= 0:
+                continue
+            salto = b1['P'] / b0['P']
+            if salto > 1.5:
+                huecos += 1
+            destino = separadas if salto > 2 else (juntas if salto < 1.25
+                                                   else None)
+            if destino is None:
+                continue
+            for f in (0, 1):
+                r0, r1 = E.branches(b0)[f], E.branches(b1)[f]
+                if len(r0) < 2 or len(r1) < 2:
+                    continue
+                lo = max(r0[0]['T'], r1[0]['T'])
+                hi = min(r0[-1]['T'], r1[-1]['T'])
+                if hi <= lo:
+                    continue
+                for n in range(7):
+                    T = lo + (hi - lo) * n / 6.0
+                    va = E._interp_rows(r0, 'T', T, ['v'])['v']
+                    vb = E._interp_rows(r1, 'T', T, ['v'])['v']
+                    if va <= 0 or vb <= 0:
+                        continue
+                    P = (b0['P'] + b1['P']) / 2.0
+                    A = lin(P, b0['P'], b1['P'], va, vb)
+                    B = lin(1.0 / P, 1.0 / b0['P'], 1.0 / b1['P'], va, vb)
+                    destino.append(100.0 * abs(A - B) / B)
+
+    mj = sum(juntas) / len(juntas)
+    ms = sum(separadas) / len(separadas)
+    (PASS if mj < 0.5 else FAIL).append(
+        '%-58s %.2f%%' % ('con isobaras juntas (P2/P1<1,25) da casi igual',
+                          mj))
+    (PASS if ms > 5.0 else FAIL).append(
+        '%-58s %.2f%%' % ('con salto >2 la recta si se separa', ms))
+    (PASS if huecos == 35 else FAIL).append(
+        '%-58s %d de 214 pares' % ('huecos grandes (P2/P1>1,5) en el PDF',
+                                   huecos))
+
+
+def test_isobara_se_parte_por_T_repetida():
+    """El corte liquido/vapor se detecta por la T de saturacion repetida.
+
+    Con el salto de v como criterio unico no se puede: cerca del critico v_f
+    y v_g convergen. En el etile a 5,0 MPa el cambio de fase es un x1,45 y el
+    paso siguiente, que no lo es, un x1,68 -- el salto de verdad es MENOR que
+    el de al lado, asi que no existe umbral que los separe.
+    """
+    partidas = sin_partir = 0
+    for sub in E.substances().values():
+        for b in sub['isobars']:
+            liq, vap = E.branches(b)
+            if liq and vap:
+                partidas += 1
+                (PASS if vap[0]['v'] > liq[-1]['v'] else FAIL).append(
+                    '%-58s %s %s MPa' % ('el corte debe subir el volumen',
+                                         sub['name'], b['P']))
+                if not sub['blend']:
+                    (PASS if abs(vap[0]['T'] - liq[-1]['T']) < 1e-9
+                     else FAIL).append(
+                        '%-58s %s %s MPa'
+                        % ('en sustancia pura las dues files comparteixen T',
+                           sub['name'], b['P']))
+            elif b['_super']:
+                sin_partir += 1
+    (PASS if partidas == 188 else FAIL).append(
+        '%-58s %d' % ('isobaras con las dos ramas', partidas))
+    (PASS if sin_partir == 30 else FAIL).append(
+        '%-58s %d' % ('supercriticas sin partir', sin_partir))
+
+
 def main():
     for fn in (test_exact_saturation, test_exact_superheated,
                test_exact_compressed_liquid, test_inverse_returns_node,
                test_external_reference, test_two_phase_lever_rule,
                test_region_routing, test_out_of_range,
-               test_neighbour_other_phase):
+               test_neighbour_other_phase,
+               test_reproduce_la_interpolacion_a_mano,
+               test_coste_de_interpolar_v_lineal,
+               test_isobara_se_parte_por_T_repetida):
         try:
             fn()
         except Exception as e:

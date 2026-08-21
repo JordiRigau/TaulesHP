@@ -69,23 +69,29 @@ a 0,15 MPa y 115 °C el agua es vapor, pero la isóbara de 0,20 MPa da líquido 
 esa misma temperatura. Interpolar entre ambas daría un número absurdo con pinta
 de razonable.
 
-**1231 pruebas** en tres niveles: 208 del motor contra nodos tabulados y tablas
-publicadas, 1008 de la capa de datos PPL —que replica la aritmética de índices
-de la calculadora para cazar desfases de una fila **en el PC y no en el
-examen**— y **15 de aceptación contra los problemas resueltos de la
-asignatura**.
+**1599 pruebas** en tres niveles: 549 del motor contra nodos tabulados, tablas
+publicadas y el cálculo a mano rehecho aparte, 1008 de la capa de datos PPL
+—que replica la aritmética de índices de la calculadora para cazar desfases de
+una fila **en el PC y no en el examen**— y **42 de aceptación contra problemas
+ya resueltos**, con su solución oficial.
 
-**La prueba de aceptación encontró dos fallos que los otros 1216 tests no
-podían ver**, porque ambos eran de concepto y no de transcripción:
+**La prueba de aceptación encontró dos fallos que los otros 1557 tests no
+podían ver**, porque el motor era coherente consigo mismo en los dos. Los dos
+hacían que la app diera **error en vez de un número**; ninguno devolvía un
+resultado equivocado:
 
 1. **Por encima de la presión crítica no hay curva de saturación**, y la
    determinación de región se caía. Afectaba a 30 isóbaras de 6 sustancias,
    14 de ellas del agua (25 a 100 MPa) — presiones de ciclo Rankine
    supercrítico, nada exótico.
-2. **`v` se interpolaba linealmente en P.** En un gas *v ≈ ZRT/P*, casi
-   hiperbólica. Con isóbaras contiguas da igual (<1 %), pero el amoníaco a
-   2,5 MPa —donde el PDF salta de 1,8 a 3,0— daba **8 % de error**.
-   Interpolando en 1/P la desviación baja a 0,09 %.
+2. **El corte líquido/vapor de cada isóbara se buscaba por el salto de
+   volumen.** Cerca del punto crítico ese salto se encoge y **10 isóbaras se
+   quedaban sin rama de vapor**, incluidas las del agua a 17,5 y 20 MPa: a esas
+   presiones, cualquier consulta de vapor sobrecalentado fallaba. Se busca
+   ahora por la temperatura de saturación repetida.
+
+Los dos están medidos y razonados en
+[`docs/ANALISIS.md`](docs/ANALISIS.md#6-estrategia-de-pruebas).
 
 **El port a PPL, documentado**: cinco intentos hasta dar con el límite de
 variables por `LOCAL`, con las cuatro hipótesis falsas que se descartaron por el
@@ -150,10 +156,10 @@ Restricciones reales de PPL que dieron forma al diseño, todas documentadas en
 |---|---|
 | Extracción del PDF (42.892 valores, 14 sustancias) | ✅ determinista, 0 avisos |
 | Validación de datos | ✅ 0 incidencias; 4 erratas del PDF localizadas |
-| Motor de referencia en Python | ✅ 208 pruebas en verde |
+| Motor de referencia en Python | ✅ 517 pruebas en verde |
 | Capa de datos PPL (índices, ramas) | ✅ 1008 pruebas en verde |
 | Código PPL en la calculadora | ✅ funcionando en G2, firmware 2.4.15515 |
-| Prueba de aceptación con problemas de la asignatura | ✅ 15 comprobaciones en verde |
+| Contraste con soluciones oficiales | ✅ 42 comprobaciones en verde, desviación máxima 1,3 % |
 
 ---
 
@@ -339,9 +345,87 @@ resetea:
 - si se pierde el PC: basta el PDF y este repositorio —
   `python tools/extract_pdf.py` reconstruye `master.json` byte a byte.
 
+## Contraste con las soluciones oficiales
+
+Que la app sea coherente con el PDF no significa que acierte. Lo que decide es
+si reproduce **lo que el profesor da por bueno**, así que
+`tests/test_aceptacion.py` rehace problemas ya resueltos de principio a fin:
+
+- **Tema 1** del cuaderno de problemas de la asignatura (depósito rígido de
+  agua, metano, propano, amoníaco, etano).
+- **Ciclo Rankine** con recalentamiento, regeneración y calor de proceso.
+  Encadena 11 consultas a las tablas y los errores se arrastran de una a
+  otra. Sale al **1,3 %**, y la potencia de la caldera al 0,003 %.
+- **Ciclo frigorífico de R-134a en dos etapas** con cámara de separación.
+  Sale al **0,63 %**.
+
+Las soluciones oficiales están resueltas con **EES**, que trabaja con
+propiedades de fluido real en vez de interpolar en una tabla. La desviación que sale es
+por tanto el error de las tablas *más* el de la interpolación: es el techo, no
+una estimación optimista.
+
+### Dos fallos de concepto que destapó
+
+Ninguno lo habrían cogido las otras pruebas, porque el motor era coherente
+consigo mismo en los dos casos. Y ninguno daba un número equivocado: los dos
+hacían que la app **fallara con un error** donde debía dar un resultado.
+
+1. **Región supercrítica.** Por encima de la presión crítica no hay curva de
+   saturación, y la determinación de región se caía. Afectaba a 30 isóbaras
+   de 6 sustancias, 14 de ellas del agua (25 a 100 MPa).
+
+2. **El corte líquido/vapor de cada isóbara.** Se detectaba por el salto de
+   volumen con umbral ×5. Cerca del punto crítico `v_f` y `v_g` convergen y
+   el salto no llega: **10 isóbaras se quedaban sin rama de vapor**, entre
+   ellas las del agua a 17,5 y 20 MPa, que son presiones normales de ciclo
+   Rankine — a esas presiones ninguna consulta de vapor sobrecalentado
+   funcionaba.
+
+   Y no es que el umbral estuviera mal puesto: **no existe ninguno que
+   sirva**. En el etilè a 5,0 MPa el cambio de fase es un ×1,45 y el paso
+   siguiente, que no es cambio de fase, es un ×1,68 — el salto de verdad es
+   *más pequeño* que el de al lado. Ahora el corte se busca por la
+   **temperatura de saturación repetida**, que en una sustancia pura es
+   inequívoca, y el volumen solo se usa en las mezclas zeotrópicas, donde hay
+   deslizamiento y la T no se repite.
+
+### Una limitación que se ha dejado a propósito
+
+La app interpola **siempre lineal**, `v` incluida: primero en T dentro de cada
+isóbara, después en P entre isóbaras. Es exactamente lo que se hace a mano.
+
+No es lo más exacto, y se sabe por qué. `v` no es lineal en P sino casi
+hiperbólica (`v ≈ ZRT/P`), así que donde el PDF pega un salto grande la recta
+se queda lejos del valor real:
+
+| salto P₂/P₁ | casos | cuánto se aleja la recta |
+|---|---|---|
+| < 1,25 | 55 % | **0,26 %** |
+| 1,25 – 1,5 | 27 % | 0,88 % |
+| 1,5 – 2 | 6 % | 2,62 % |
+| > 2 | 13 % | **10,07 %** |
+
+Son **35 huecos grandes sobre 214 pares de isóbaras**, casi todos a presión
+baja (`0,06→0,1`, `0,1→0,2`, `0,2→0,4`) más el del amoníaco `1,8→3,0`.
+
+Se ha elegido reproducir el método y no corregirlo, porque **el número que da
+la app tiene que ser el que se puede justificar en el papel**. De poco sirve
+un resultado más exacto que no cuadra con la interpolación que uno acaba de
+escribir.
+
+El coste está acotado y hay un caso conocido donde se nota: el problema 17 del
+cuaderno pide 1 mol de amoníaco a 2,5 MPa y 340 K. La tabla salta de 1,8 a
+3,0 MPa; a mano —y en la app— sale **0,9952 dm³**, y la solución oficial dice
+**0,9202**, un 8 % menos. Ese valor no se puede obtener interpolando
+linealmente entre esas dos isóbaras. La app lo anota como limitación conocida
+en vez de disimularlo, y `tests/test_engine.py` comprueba que el resultado
+coincide con el cálculo a mano rehecho aparte, hasta 1e-9.
+
 ## Pendiente
 
-**La prueba de aceptación**: 3-5 problemas ya resueltos de la asignatura, de
-principio a fin. Los 208 tests del motor y los 1008 de la capa de datos
-verifican que la app es coherente con el PDF y con tablas publicadas, pero no
-que reproduzca lo que da por bueno el profesor.
+- La sección «C. Propietats generalitzades» del PDF (diagramas de
+  compresibilidad) no está extraída; la app no la cubre.
+- En los 35 huecos grandes, `v` se aleja del valor real por interpolar lineal
+  (ver arriba). Es deliberado, no un error.
+- 4 erratas del PDF en la tabla del mercurio, localizadas pero no corregidas:
+  se dejan como están para no separarse de la fuente.

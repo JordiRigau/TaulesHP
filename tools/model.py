@@ -107,6 +107,13 @@ def load(path=MASTER):
             sub['isobars'].append({'P': b['P_MPa'], 'page': b['page'], 'rows': rows})
         sub['isobars'].sort(key=lambda b: b['P'])
 
+        # Por encima de Pc no hay curva de saturacion: la isobara es una sola
+        # rama continua. Se marca aqui, y no en el motor, porque los
+        # generadores tambien parten isobaras y deben partirlas igual.
+        for b in sub['isobars']:
+            b['_super'] = (sub['Pc_MPa'] is not None
+                           and b['P'] > sub['Pc_MPa'])
+
         units.discard(None)
         sub['T_unit'] = units.pop() if len(units) == 1 else ('MIXTO:%s' % sorted(units))
         out.append(sub)

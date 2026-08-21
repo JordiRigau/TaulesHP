@@ -219,9 +219,11 @@ Nunca se mezclan fases en silencio. El caso está cubierto por el test
 
 ### 3.4 Interpolación y búsqueda inversa
 
-- **Lineal siempre**, y en el orden en que se hace a mano: **primero en T**
-  dentro de cada isóbara, **después en P** entre isóbaras. El objetivo es
-  reproducir la solución del profesor, no el valor más exacto.
+- **Lineal siempre**, `v` incluida, y en el orden en que se hace a mano:
+  **primero en T** dentro de cada isóbara, **después en P** entre isóbaras.
+  El objetivo es reproducir el cálculo del examen, no el valor más exacto:
+  el número tiene que poder justificarse en el papel. Tiene un coste conocido
+  y acotado (§6).
 - **Nunca se extrapola.** Fuera del rango tabulado se lanza error visible
   (`FueraDeRango` en Python, región = −1 y pantalla roja en la Prime).
 - **Inversa en bifásico**: despeje directo de x.
@@ -386,7 +388,7 @@ sino "los números cumplen física conocida"):
 Resultado actual: **0 incidencias estructurales o físicas**; 4 erratas del PDF
 original, todas en mercurio.
 
-### App — `tests/test_engine.py` (208 comprobaciones, todas en verde)
+### App — `tests/test_engine.py` (549 comprobaciones, todas en verde)
 
 La trampa que advertía el prompt (implementar el mismo algoritmo dos veces solo
 detecta errores de transcripción) se evita usando **tres fuentes ajenas al
@@ -398,7 +400,7 @@ algoritmo**:
 | **B. Tablas de vapor publicadas** (Çengel/NIST) | detecta un fallo coherente consigo mismo pero equivocado. Ej.: agua a 3 MPa/350 °C da h = 3116,06 frente a 3116,1 publicado |
 | **C. Casos límite exigidos** | fuera de rango (debe fallar visiblemente), x fuera de [0,1], vecina en otra fase, enrutado de región |
 
-### Capa PPL — `tests/test_ppl_layout.py` (341 comprobaciones, todas en verde)
+### Capa PPL — `tests/test_ppl_layout.py` (1008 comprobaciones, todas en verde)
 
 Que un programa compile en la Prime no dice nada de si los índices están bien.
 Lo que más se rompe al portar a PPL es la **aritmética de índices** (matrices
@@ -409,50 +411,127 @@ como lo hace `TERMO.hpprgm` y lo compara con el motor. Un desfase de una fila
 aparece aquí, en el PC, y no en el examen. Verifica además que ningún valor
 pierde precisión al serializarse (peor desviación relativa < 1e-15).
 
-### Aceptación — `tests/test_aceptacion.py` (15 comprobaciones, en verde)
+### Aceptación — `tests/test_aceptacion.py` (42 comprobaciones, en verde)
 
-Problemas del Tema 1 de *«Termodinàmica. Tests i problemes»* (ETSEIB-UPC, 2025)
-con su solución oficial. Los enunciados marcados «Taules individualitzades»
-usan exactamente estas tablas. Desviaciones de **0,002 % a 0,42 %**.
+La única prueba que puede decir si la app **sirve**. Las otras dos verifican
+coherencia interna; esta compara contra lo que el profesor da por bueno.
 
-**Encontró dos fallos que los otros 1216 tests no podían ver**, porque los dos
-eran de concepto y no de transcripción — justo lo que advertía el planteamiento
-inicial sobre implementar el mismo algoritmo dos veces:
+| Fuente | Qué se rehace | Desviación máx. |
+|---|---|---|
+| *«Termodinàmica. Tests i problemes»* (ETSEIB-UPC, 2025), Tema 1 | depósito rígido de agua, metano, propano, amoníaco, etano | 0,42 % |
+| Ciclo resuelto, con solución oficial | ciclo Rankine con recalentamiento, regeneración y calor de proceso | 1,31 % |
+| Ciclo resuelto, con solución oficial | ciclo frigorífico de R-134a en dos etapas con cámara de separación | 0,63 % |
 
-**1. No se contemplaba la región supercrítica.** Por encima de P_c no hay curva
-de saturación, así que comparar contra T_sat no tiene sentido y el motor se
-caía con *«fuera del rango tabulado»*. Afectaba a **30 isóbaras de 6
-sustancias**, 14 de ellas del agua (25 a 100 MPa): presiones de ciclo Rankine
-supercrítico, nada exótico. Ahora hay una región propia y las isóbaras se leen
-sin exigir fase.
+Los dos ciclos son la prueba dura: encadenan 11 y 13 consultas a las tablas, y
+el error de cada una se arrastra a la siguiente. El Rankine además pasa por
+líquido comprimido a 17,5 MPa, dos expansiones isentrópicas, tres líquidos
+saturados y un título por entalpía; el frigorífico añade una inversa `P(T,h)`
+y un rendimiento isentrópico, que es una diferencia de dos entalpías parecidas
+y por tanto amplifica el error relativo.
+
+Las soluciones oficiales están resueltas con **EES**, que trabaja con
+propiedades de fluido real en lugar de interpolar en una tabla. La desviación medida es
+entonces el error de las tablas *más* el de la interpolación: es una cota
+superior, no una estimación benévola. Que un ciclo entero salga al 1,3 % con
+una tabla de papel de por medio es el resultado, no el margen de error.
+
+**Encontró dos fallos de concepto** que los otros 1557 tests no podían ver,
+porque el motor era coherente consigo mismo en los dos casos — justo lo que
+advertía el planteamiento inicial sobre implementar el mismo algoritmo dos
+veces. Los dos hacían que la app **fallara con un error** donde debía dar un
+número; ninguno devolvía un resultado equivocado. Y sacó a la luz una tercera
+cuestión, que no es un fallo sino una decisión de diseño.
+
+#### 1. No se contemplaba la región supercrítica
+
+Por encima de P_c no hay curva de saturación, así que comparar contra T_sat no
+tiene sentido y el motor se caía con *«fuera del rango tabulado»*. Afectaba a
+**30 isóbaras de 6 sustancias**, 14 de ellas del agua (25 a 100 MPa):
+presiones de ciclo Rankine supercrítico, nada exótico. Ahora hay una región
+propia y las isóbaras se leen sin exigir fase.
 
 Con P < P_c y T > T_c el estado es vapor sobrecalentado corriente, no
 supercrítico: la región la decide **la presión**. Confundirlo rompió un test de
 enrutado y sirvió para acotarlo bien.
 
-**2. `v` se interpolaba linealmente en P.** En un gas *v ≈ ZRT/P*, o sea casi
-hiperbólica: entre isóbaras muy separadas la recta se aleja mucho. Medido sobre
-estas tablas:
+#### 2. El corte líquido/vapor se buscaba por el salto de volumen
 
-| Separación P₂/P₁ | Diferencia media | Máxima |
+Cada isóbara del PDF trae, seguidas, las filas de líquido subenfriado, las dos
+de saturación y las de vapor. Hay que saber dónde corta. Se detectaba por el
+salto de `v` con umbral ×5, y cerca del punto crítico eso no funciona: `v_f` y
+`v_g` convergen y el salto se queda corto. **10 isóbaras se quedaban sin rama
+de vapor**, entre ellas las del agua a 17,5 y 20 MPa — presiones normales de
+ciclo Rankine, que es exactamente donde se cayó.
+
+Y no es que el umbral estuviera mal elegido: **no existe ninguno que sirva**.
+El contraejemplo está en el etilè a 5,0 MPa, justo por debajo de su presión
+crítica (5,0418 MPa):
+
+| T | `v` | |
 |---|---|---|
-| < 1,25 | 0,39 % | 1,04 % |
-| 1,25 – 1,5 | 1,36 % | 4,52 % |
-| 1,5 – 2 | 4,05 % | 8,27 % |
-| > 2 | **14,99 %** | **79,21 %** |
+| 281,98 °C | 0,00394 | líquido saturado |
+| 281,98 °C | 0,00571 | vapor saturado — **el cambio de fase, ×1,45** |
+| 290,0 °C | 0,00957 | ×1,68, y aquí no pasa nada |
 
-El caso que lo destapó: amoníaco a 2,5 MPa, donde **el PDF salta de 1,8 a
-3,0 MPa**. La recta daba 0,9952 dm³/mol frente a los 0,9202 oficiales (8 %);
-interpolando en 1/P sale 0,9194 — **0,09 %**.
+El salto de verdad es *más pequeño* que el que viene justo después. Ni un
+umbral ni «coger el salto mayor» aciertan.
 
-Así que `v` se interpola en 1/P y *u*, *h*, *s* siguen lineales, que varían
-poco con P a T constante. Con isóbaras contiguas —el caso normal— la diferencia
-es inferior al 1 %, así que no altera nada de lo que ya funcionaba.
+El criterio bueno es otro: en una sustancia pura las dos filas de saturación
+**comparten temperatura**, y eso es inequívoco. El volumen queda solo para las
+**mezclas zeotrópicas**, donde hay deslizamiento y la T no se repite (en R-404A
+a 0,14 MPa la burbuja está a −39,24 °C y el rocío a −38,53 °C). Ahí sí hay
+margen de sobra, porque las mezclas del PDF no llegan tan cerca del crítico:
+el salto real más pequeño es ×4,43 y el mayor falso positivo ×1,20, con el
+umbral puesto en ×2,0.
 
-> Matiz sobre el criterio de «reproducir la interpolación lineal hecha a mano»:
-> sigue valiendo dentro de cada isóbara y para las magnitudes energéticas. Pero
-> la solución oficial **no** interpola `v` linealmente entre isóbaras lejanas,
-> y el objetivo siempre fue reproducir esa solución, no la recta.
+Falta un tercer caso: por encima de P_c no hay salto ninguno, pero el agua a
+25 MPa cruza la región pseudocrítica con `v` ×3,03 entre 375 y 400 °C, que el
+criterio del volumen tomaba por una vaporización. Las isóbaras supercríticas se
+marcan al cargar y se devuelven como una sola rama continua.
+
+#### 3. La limitación que se ha dejado a propósito
+
+Este no es un fallo, sino una decisión, y conviene dejarla escrita porque la
+prueba de aceptación la señala.
+
+`v` se interpola **linealmente en P**, como se hace a mano. No es lo más
+exacto: en un gas *v ≈ ZRT/P* es casi una hipérbola, y entre isóbaras
+separadas la recta se aleja. Medido con el espaciado real de las tablas —no
+quitando isóbaras, que duplicaría el hueco— la diferencia entre interpolar en
+P y en 1/P es:
+
+| salto P₂/P₁ | casos | media | p95 | máximo |
+|---|---|---|---|---|
+| < 1,25 | 4227 (55 %) | **0,26 %** | 0,85 % | 2,36 % |
+| 1,25 – 1,5 | 2076 | 0,88 % | 3,00 % | 5,31 % |
+| 1,5 – 2 | 468 | 2,62 % | 6,77 % | 8,43 % |
+| > 2 | 972 (13 %) | **10,07 %** | 60,05 % | 85,30 % |
+
+Son **35 huecos grandes sobre 214 pares de isóbaras**, casi todos a presión
+baja (`0,06→0,1`, `0,1→0,2`, `0,2→0,4`) más el del amoníaco `1,8→3,0`.
+
+**Por qué se deja así.** El criterio del proyecto siempre fue reproducir el
+método del examen, y ahí es donde se usa la app. Un resultado más exacto que
+no cuadra con la interpolación que el alumno acaba de escribir en el papel
+vale menos que uno reproducible: no se puede defender, y obliga a explicar por
+qué la calculadora dice otra cosa que la cuenta de al lado.
+
+**El caso donde se nota.** El problema 17 pide 1 mol de amoníaco a 2,5 MPa y
+340 K. La tabla del amoníaco salta de 1,8 a 3,0 MPa, y a 66,85 °C da 1,3742 y
+0,7244 dm³/mol. La recta evaluada en 2,5 MPa vale **0,9952**, que es lo que
+sale a mano y lo que da la app. La solución oficial es **0,9202** —un 8 %
+menos— y no se obtiene interpolando linealmente; en 1/P saldría 0,9193.
+
+Se probó con 1/P y se descartó: de las 42 comprobaciones de aceptación, la
+interpolación lineal falla **solo esa una**. Los dos ciclos completos salen
+idénticos con los dos métodos, porque sus consultas caen en zonas donde las
+isóbaras están juntas. O sea, el cambio no arreglaba nada de lo que se usa a
+diario y a cambio separaba la app del lápiz.
+
+La prueba `test_reproduce_la_interpolacion_a_mano` rehace la interpolación
+aparte del motor y exige coincidencia a 1e-9, para que nadie vuelva a meter
+1/P sin darse cuenta. `test_coste_de_interpolar_v_lineal` deja anotado el
+coste, y avisaría si el PDF cambiara y los huecos crecieran.
 
 ### Un caso donde ni la app ni el método coinciden con el oficial
 
@@ -468,7 +547,7 @@ lo que estas tablas pueden resolver.
 
 | Riesgo | Estado | Mitigación |
 |---|---|---|
-| **PPL sin probar en hardware** | **abierto** | Es el riesgo vivo: el código PPL no se ha ejecutado nunca. La lógica y los datos están verificados en Python, pero la sintaxis PPL no. Primer paso: cargarlo en el Virtual Calculator |
+| PPL sin probar en hardware | **resuelto** | Probado en una G2 real (firmware 2.4.15515): compila, calcula y la batería de casos sale correcta |
 | Tiempo de compilación del bloque de datos | acotado | 112 KB por defecto; se puede recortar a solo agua (65 KB) |
 | Fase cruzada al interpolar en P | **resuelto** | §3.3, con aviso en pantalla y test dedicado |
 | No linealidad de P_sat(T) | **resuelto** | Se guardan las dos tablas; error medido, no supuesto (§2) |

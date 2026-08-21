@@ -106,20 +106,49 @@ def sat_at_P(sub, P):
 def branches(b):
     """Parte una isobara en (rama liquida, rama vapor).
 
-    El corte se detecta por el SALTO de volumen especifico, no por una T
-    repetida: en sustancias puras las dos filas de saturacion tienen la misma
-    T, pero en mezclas zeotropicas hay deslizamiento (en R-404A a 0,14 MPa la
-    burbuja esta a -39,24 C y el rocio a -38,53 C) y las T son distintas.
+    Dos criterios, en este orden:
+
+      1. T repetida. En una sustancia pura las dos filas de saturacion
+         comparten temperatura. Es inequivoco.
+      2. Salto de volumen. Las mezclas zeotropicas tienen deslizamiento
+         (en R-404A a 0,14 MPa la burbuja esta a -39,24 C y el rocio a
+         -38,53 C), asi que ahi la T no se repite y hay que mirar v.
+
+    El orden importa, y no hay umbral de volumen que pueda sustituirlo. Cerca
+    del punto critico v_f y v_g convergen: en el etile a 5,0 MPa (Pc=5,0418)
+    el cambio de fase es un x1,45 y el paso siguiente, que no lo es, un x1,68.
+    El salto de verdad es MENOR que el de al lado, asi que ni un umbral ni
+    coger el salto mayor aciertan. Con el volumen como criterio unico se
+    partian mal 10 isobaras, entre ellas las del agua a 17,5 y 20 MPa, que
+    son presiones normales de ciclo Rankine.
     """
     if '_br' in b:
         return b['_br']
     rows = b['rows']
-    best, bi = 1.0, None
+    bi = None
+
+    # Por encima de Pc no hay cambio de fase: la isobara es una sola rama
+    # continua. Hay que decirlo explicitamente porque el agua a 25 MPa cruza
+    # la region pseudocritica con v x3,03 entre 375 y 400 C, un salto que el
+    # criterio 2 confundiria con una vaporizacion.
+    if b.get('_super'):
+        b['_br'] = (rows, [])
+        return b['_br']
+
     for i in range(len(rows) - 1):
-        v0, v1 = rows[i]['v'], rows[i + 1]['v']
-        if v0 and v1 and v1 / v0 > best:
-            best, bi = v1 / v0, i
-    if bi is None or best < 5.0:
+        if abs(rows[i + 1]['T'] - rows[i]['T']) < 1e-9:
+            bi = i
+            break
+
+    if bi is None:
+        best = 2.0          # las mezclas saltan x4,4 como poco
+        for i in range(len(rows) - 1):
+            v0, v1 = rows[i]['v'], rows[i + 1]['v']
+            if v0 and v1 and v1 / v0 > best:
+                best, bi = v1 / v0, i
+
+    if bi is None:
+        # sin salto: isobara supercritica, una sola rama continua
         b['_br'] = (rows, []) if rows[0]['v'] < 0.01 else ([], rows)
     else:
         b['_br'] = (rows[:bi + 1], rows[bi + 1:])
@@ -181,26 +210,30 @@ def bracket_isobars(sub, P):
 
 
 def _mix_P(P, p0, p1, r0, r1):
-    """Combina dos isobaras a la presion P.
+    """Combina dos isobaras a la presion P. Lineal, incluida v.
 
-    v se interpola en 1/P y no en P. En un gas v ~ ZRT/P, o sea casi
-    hiperbolica: entre isobaras muy separadas la recta se aleja mucho. Medido
-    sobre estas tablas, con isobaras contiguas (P2/P1 < 1,25) las dos formas
-    diferen menos del 1 %, pero con P2/P1 > 2 la diferencia llega al 79 %.
+    Decision deliberada: la app tiene que dar LO MISMO que sale interpolando
+    a mano en el examen, que es lo unico que se puede justificar en el papel.
+    No se trata de acertar mas que el metodo, sino de reproducirlo.
 
-    El caso que lo destapo: amoniaco a 2,5 MPa, donde el PDF salta de 1,8 a
-    3,0 MPa. Lineal en P da 0,9952 dm3/mol y la solucion oficial es 0,9202;
-    en 1/P sale 0,9194, que es la buena.
+    Tiene un coste conocido y acotado. v no es lineal en P sino casi
+    hiperbolica (v ~ ZRT/P), asi que donde el PDF pega un salto grande la
+    recta se aleja del valor real. Medido sobre estas tablas:
 
-    u, h y s se quedan lineales: varian poco con P a T constante y ahi la
-    recta es lo correcto.
+        P2/P1 < 1,25   0,26 % de diferencia media   (4227 casos, el 55 %)
+        P2/P1 1,25-1,5 0,88 %
+        P2/P1 1,5-2    2,62 %
+        P2/P1 > 2      10,07 %                      (972 casos, el 13 %)
+
+    Son 35 huecos grandes sobre 214 pares de isobaras, casi todos a presion
+    baja (0,06->0,1, 0,1->0,2, 0,2->0,4) mas el del amoniaco 1,8->3,0.
+
+    El unico problema conocido donde esto separa a la app de la solucion
+    oficial es el amoniaco a 2,5 MPa: a mano y aqui sale 0,9952 dm3/mol,
+    y el cuaderno da 0,9202, que no se puede obtener interpolando linealmente
+    entre 1,8 y 3,0 MPa. Ver tests/test_aceptacion.py.
     """
-    out = {}
-    for k in PROPS:
-        out[k] = _lin(P, p0, p1, r0[k], r1[k])
-    if p0 > 0 and p1 > 0 and P > 0:
-        out['v'] = _lin(1.0 / P, 1.0 / p0, 1.0 / p1, r0['v'], r1['v'])
-    return out
+    return dict((k, _lin(P, p0, p1, r0[k], r1[k])) for k in PROPS)
 
 
 def single_phase_at_PT(sub, P, T, phase, avisos):

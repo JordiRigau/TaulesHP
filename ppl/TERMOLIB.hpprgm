@@ -239,14 +239,14 @@ BEGIN
 
   IF SIZE(zra) == 4 AND SIZE(zrb) == 4 THEN
     zres := {};
+    // Lineal per a les quatre, v inclosa: la app ha de donar EXACTAMENT
+    // el mateix que surt interpolant a ma a l'examen. No es el mes exacte
+    // (v ~ ZRT/P es gairebe hiperbolica, i on el PDF fa un salt gran la
+    // recta se'n va), pero es l'unic numero que es pot justificar al paper.
+    // NO tornar a posar 1/P aqui: ho vigila test_engine.py.
     FOR zj FROM 1 TO 4 DO
       zres(zj) := TLIN(zp, za, zb, zra(zj), zrb(zj));
     END;
-    // v s'interpola en 1/P, no en P: en un gas v ~ ZRT/P, gairebe
-    // hiperbolica. Amb isobares contigues les dues formes diferen menys
-    // de l'1 %, pero amb un salt gran (amoniac: el PDF va d'1,8 a 3,0 MPa)
-    // la recta s'equivoca un 8 %. u, h i s es queden lineals.
-    zres(1) := TLIN(1/zp, 1/za, 1/zb, zra(1), zrb(1));
     RETURN zres;
   END;
 
@@ -264,13 +264,11 @@ BEGIN
   IF SIZE(zra) == 4 THEN
     zres := {};
     FOR zj FROM 1 TO 4 DO zres(zj) := TLIN(zp, za, zpsat, zra(zj), zrsat(zj)); END;
-    zres(1) := TLIN(1/zp, 1/za, 1/zpsat, zra(1), zrsat(1));
     RETURN zres;
   END;
   IF SIZE(zrb) == 4 THEN
     zres := {};
     FOR zj FROM 1 TO 4 DO zres(zj) := TLIN(zp, zb, zpsat, zrb(zj), zrsat(zj)); END;
-    zres(1) := TLIN(1/zp, 1/zb, 1/zpsat, zrb(1), zrsat(1));
     RETURN zres;
   END;
   TERR := "cap isobara veina te aquesta fase a aquesta T";

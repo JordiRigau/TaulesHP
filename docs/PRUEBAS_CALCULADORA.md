@@ -18,9 +18,9 @@ En cada caso: ejecuta `TERMO()`, elige la sustancia, pon las dos magnitudes en l
 | 3 | 3 R-134a | `P=0.14 · T=20` | 20.00 C | 0.14 | 0.16544 | 396.37 | 419.53 | 1.8580 | -- | VAPOR SOBREESCALFAT |
 | 4 | 1 R-718 (Aigua) | `P=3 · T=350` | 350.00 C | 3 | 0.090556 | 2844.39 | 3116.06 | 6.7449 | -- | VAPOR SOBREESCALFAT |
 | 5 | 1 R-718 (Aigua) | `P=0.075 · s=6.7449` | 91.76 C | 0.075 | 1.96466 | 2255.66 | 2403.01 | 6.7449 | 0.8861 | BIFASIC |
-| 6 | 1 R-718 (Aigua) | `P=1.3 · T=375` | 375.00 C | 1.3 | 0.225541 | 2912.74 | 3205.93 | 7.2605 | -- | VAPOR SOBREESCALFAT |
+| 6 | 1 R-718 (Aigua) | `P=1.3 · T=375` | 375.00 C | 1.3 | 0.226911 | 2912.74 | 3205.93 | 7.2605 | -- | VAPOR SOBREESCALFAT |
 | 7 | 1 R-718 (Aigua) | `P=1 · h=500` | 118.95 C | 1 | 0.00105892 | 498.94 | 500.00 | 1.5144 | -- | LIQUID COMPRIMIT |
-| 8 | 1 R-718 (Aigua) | `P=0.15 · T=115` | 115.00 C | 0.15 | 1.17114 | 2525.04 | 2700.74 | 7.2542 | -- | VAPOR SOBREESCALFAT |
+| 8 | 1 R-718 (Aigua) | `P=0.15 · T=115` | 115.00 C | 0.15 | 1.23895 | 2525.04 | 2700.74 | 7.2542 | -- | VAPOR SOBREESCALFAT |
 | 9 | 2 R-717 (Amoníac) | `P=0.2 · h=1200` | -18.85 C | 0.2 | 0.423529 | 1115.29 | 1200.00 | 4.8543 | 0.7115 | BIFASIC |
 
 ## Fuera de rango — debe dar pantalla roja de ERROR, nunca un número
