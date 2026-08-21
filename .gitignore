@@ -1,0 +1,22 @@
+# ---- material de la asignatura: NO se redistribuye -------------------
+# El PDF de tablas es material del curso y data/ contiene sus 42.892
+# cifras extraidas, o sea su contenido integro. El repositorio publica el
+# codigo; quien tenga el PDF regenera los datos con un comando.
+Tablas_propiedades_individualizadas.pdf
+data/
+
+# ficheros PPL que llevan los datos dentro
+ppl/TDAT_*.hpprgm
+ppl/compacte/TDAT.hpprgm
+ppl/compacte/TDAT.txt
+
+# ppl/txt/ son copias exactas de ppl/*.hpprgm, generadas
+ppl/txt/
+
+# ---- python ----------------------------------------------------------
+__pycache__/
+*.pyc
+
+# ---- varios ----------------------------------------------------------
+work/
+dist/

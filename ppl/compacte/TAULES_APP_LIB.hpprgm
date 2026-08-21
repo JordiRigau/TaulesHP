@@ -1,0 +1,344 @@
+// TAULES (App) - nomes interficie
+// GENERADO por tools/gen_merged.py -- NO EDITAR A MANO.
+// Se regenera desde data/master.json y los fuentes de ppl/.
+// ===================================================================
+
+// El motor va a part, al programa TERMOLIB, perque una altra
+// app el pugui cridar.
+
+// ========= INTERFICIE (ve de ppl/TERMO.hpprgm) =========
+EXPORT TKHELP:=3;
+EXPORT TKESC:=4;
+EXPORT TKVIEW:=9;
+
+EXPORT TSIG(zx, zn)
+BEGIN
+  LOCAL zex, zd;
+  IF zx == 0 THEN RETURN "0"; END;
+  zex := FLOOR(LOG(ABS(zx)));
+  zd := zn - 1 - zex;
+  IF zd < 0 THEN zd := 0; END;
+  IF zd > 9 THEN zd := 9; END;
+  RETURN STRING(ROUND(zx, zd));
+END;
+
+EXPORT TDEC(zx, zn)
+BEGIN
+  RETURN STRING(ROUND(zx, zn));
+END;
+
+// Espera una tecla de veritat, i la consumeix.
+//
+// No es fa servir WAIT(-1): no espera. Abans semblava que si perque en
+// acabar el programa la pantalla es quedava dibuixada fins que es premia
+// alguna cosa; en posar el bucle, els resultats passaven de llarg i tornava
+// el formulari a l'instant.
+//
+// GETKEY torna el codi de l'ultima tecla premuda, o un valor negatiu si no
+// n'hi ha cap pendent. Primer es buida el buffer (la tecla amb que s'ha
+// acceptat el formulari encara hi es) i despres s'espera una de nova.
+EXPORT TPAUSE()
+BEGIN
+  LOCAL zk;
+  REPEAT
+    zk := GETKEY;
+  UNTIL zk < 0;
+  REPEAT
+    zk := GETKEY;
+  UNTIL zk >= 0;
+  RETURN zk;
+END;
+
+// ---- pantalla de resultats ----------------------------------------
+EXPORT TSHOW(zst)
+BEGIN
+  LOCAL zy, zreg, zut, zsa;
+  RECT();
+  IF zst(8) < 0 THEN
+    TEXTOUT_P("ERROR", 4, 4, 4, RGB(200,0,0));
+    TEXTOUT_P(zst(9), 4, 34, 3);
+    TEXTOUT_P("Cap valor: revisa dades o rang.", 4, 64, 2);
+    TEXTOUT_P("Prem una tecla per continuar", 4, 210, 2);
+    RETURN TPAUSE();
+  END;
+  zut := IFTE(TMD(2) == 1, " K", " C");
+  // El motor marca tota la campana com a bifasica, tambe als extrems. Es
+  // correcte per al calcul, pero en pantalla x=0 i x=1 son les fronteres i
+  // convé dir-ho amb aquest nom: si no, un vapor saturat surt com "bifasic".
+  zreg := "VAPOR SOBREESCALFAT";
+  IF zst(8) == 0 THEN zreg := "LIQUID COMPRIMIT"; END;
+  IF zst(8) == 1 THEN zreg := "BIFASIC"; END;
+  IF zst(8) == 1 AND zst(7) <= 1E-9 THEN zreg := "LIQUID SATURAT  x=0"; END;
+  IF zst(8) == 1 AND zst(7) >= 1 - 1E-9 THEN zreg := "VAPOR SATURAT  x=1"; END;
+  TEXTOUT_P(TMD(1), 4, 2, 3);
+  TEXTOUT_P(zreg, 4, 24, 3, RGB(0,0,180));
+  // La T es dona SEMPRE a les dues escales: aixi tant se val en quina
+  // estigui tabulada la substancia i no cal recordar-ho.
+  zy := 45;
+  IF TMD(2) == 1 THEN
+    TEXTOUT_P("T = " + TDEC(zst(1),2) + " K = " + TDEC(zst(1)-273.15,2) + " C",
+              4, zy, 3);
+  ELSE
+    TEXTOUT_P("T = " + TDEC(zst(1),2) + " C = " + TDEC(TTOK(zst(1)),2) + " K",
+              4, zy, 3);
+  END;
+  zy := zy + 21;
+  TEXTOUT_P("P = " + TSIG(zst(2),5) + " MPa", 4, zy, 3);
+  zy := zy + 21;
+  TEXTOUT_P("v = " + TSIG(zst(3),6) + " m3/kg", 4, zy, 3);
+  zy := zy + 21;
+  TEXTOUT_P("u = " + TDEC(zst(4),2) + " kJ/kg", 4, zy, 3);
+  zy := zy + 21;
+  TEXTOUT_P("h = " + TDEC(zst(5),2) + " kJ/kg", 4, zy, 3);
+  zy := zy + 21;
+  TEXTOUT_P("s = " + TDEC(zst(6),4) + " kJ/kgK", 4, zy, 3);
+  zy := zy + 21;
+  IF zst(7) >= 0 THEN
+    TEXTOUT_P("x = " + TDEC(zst(7),4), 4, zy, 3, RGB(0,120,0));
+  ELSE
+    TEXTOUT_P("x = --", 4, zy, 3);
+  END;
+  // Context de saturacio: quanta T separa l'estat de la campana. D'un cop
+  // d'ull es veu si s'esta a prop de la frontera, que es on cal anar amb
+  // compte i on la interpolacio es mes delicada.
+  IF zst(8) <> 1 THEN
+    zsa := TSATP(zst(2));
+    IF SIZE(zsa) == 10 THEN
+      IF zst(8) == 2 THEN
+        TEXTOUT_P("Tsat = " + TDEC(zsa(2),2) + zut + "   sobreescalfament +"
+                  + TDEC(zst(1)-zsa(2),1), 4, 191, 2, RGB(0,110,0));
+      ELSE
+        TEXTOUT_P("Tsat = " + TDEC(zsa(1),2) + zut + "   subrefredament -"
+                  + TDEC(zsa(1)-zst(1),1), 4, 191, 2, RGB(0,110,0));
+      END;
+    END;
+  END;
+  IF zst(9) <> "" THEN
+    TEXTOUT_P("! " + zst(9), 4, 207, 2, RGB(200,80,0));
+  END;
+  TEXTOUT_P("tecla=formulari  View=menu  Help=ajuda  Esc=surt", 4, 224, 2);
+  RETURN TPAUSE();
+END;
+
+// ---- ajuda ---------------------------------------------------------
+// El text viu NOMES aqui. El dibuixa TAJUDA() amb [Help] i el imprimeix
+// Info() de l'app amb [Shift][Apps], recorrent aquesta mateixa llista: aixi
+// els dos diuen exactament el mateix i no poden anar cadascun pel seu cantó.
+//
+// Son 11 linies a proposit: amb interlineat de 17 px des de y=26, l'ultima
+// cau a 196 i el peu a 218. Afegir-ne mes les solaparia.
+EXPORT TAJUT:={
+  "TEMPERATURA",
+  "Hi ha T [C] i T [K] al desplegable: tria",
+  "la que tinguis. Els resultats donen les dues.",
+  "SALT ENTRE ESTATS",
+  "Es recorden els DOS ultims calculs:",
+  "l'anterior es l'estat 1, el nou el 2.",
+  "El menu -> Salt 1->2 resta 2 menys 1 i dona",
+  "dh, du, ds, dv. Calcula primer l'inicial:",
+  "l'ordre decideix el signe.",
+  "TECLES:  tecla=formulari   View=menu",
+  "         Help=ajuda        Esc=surt"
+};
+
+EXPORT TAJUDA()
+BEGIN
+  LOCAL zy, zi;
+  RECT();
+  TEXTOUT_P("TAULES - ajuda", 4, 2, 3, RGB(0,0,180));
+  zy := 26;
+  FOR zi FROM 1 TO SIZE(TAJUT) DO
+    TEXTOUT_P(TAJUT(zi), 4, zy, 2);
+    zy := zy + 17;
+  END;
+  TEXTOUT_P("Prem una tecla per tornar", 4, 218, 2);
+  TPAUSE();
+  RETURN 1;
+END;
+
+// Diagnostic: diu el codi de la tecla que premis. Nomes els codis 30
+// (Enter) i els de les fletxes estan documentats; si cal lligar una altra
+// tecla a alguna cosa, aquest programa dona el numero.
+EXPORT TKEY()
+BEGIN
+  LOCAL zk;
+  RECT();
+  TEXTOUT_P("Prem una tecla...", 4, 40, 3);
+  zk := TPAUSE();
+  RECT();
+  TEXTOUT_P("codi = " + STRING(zk), 4, 40, 4, RGB(0,0,180));
+  TEXTOUT_P("Prem una tecla per tornar", 4, 224, 2);
+  TPAUSE();
+  RETURN zk;
+END;
+
+// ---- programa principal -------------------------------------------
+// La navegacio va DINS de la pantalla, no per les tecles de vista.
+//
+// Motiu: una app en blanc no te cap vista on reposar. Si START() torna, la
+// calculadora cau a Home i llavors [Num] i [View] ja no arriben a l'app.
+// I si START() no torna (bucle), es queda el teclat i aquelles tecles
+// tampoc responen. Les dues coses no poden anar alhora, aixi que el menu
+// es dibuixa i punt: sempre es veu que es pot fer.
+EXPORT TERMO()
+BEGIN
+  LOCAL zok, zi1, zi2, zw1, zw2, zsw;
+  LOCAL zst, zgo, zprev, zopt, zk;
+
+  IF TCUR < 1 OR TCUR > SIZE(TSUBS) THEN TCUR := 1; END;
+  IF TD1 < 1 OR TD1 > 8 THEN TD1 := 1; END;
+  IF TD2 < 1 OR TD2 > 8 THEN TD2 := 7; END;   // per defecte (P, h)
+
+  zgo := 1;
+  zst := {0,0,0,0,0,0,0,-1,""};
+
+  WHILE zgo == 1 DO
+    zprev := TCUR;
+    TLOAD(TCUR);
+
+    // Camps de tipus real [0]: s'hi escriu el numero directament, sense
+    // cometes. Els desplegables porten la unitat de cada magnitud.
+    // Posicio {x%, ample%, fila}: l'etiqueta va al buit de l'ESQUERRA del
+    // camp, per aixo x=22 i no 5 (amb 5 sortien retallades com un punt).
+    zok := INPUT(
+      { {TCUR, TNAMS, {22, 72, 0}},
+        {TD1, TPROP, {22, 30, 1}}, {TV1, [0], {58, 37, 1}},
+        {TD2, TPROP, {22, 30, 2}}, {TV2, [0], {58, 37, 2}} },
+      "TERMO - quines dues coneixes?",
+      {"Sust", "Dada 1", "=", "Dada 2", "="},
+      {"substancia", "1a magnitud coneguda", "valor, en la unitat del desplegable",
+       "2a magnitud coneguda", "valor, en la unitat del desplegable"});
+
+    IF zok == 0 THEN
+      zgo := 0;
+    ELSE
+      IF TCUR <> zprev THEN TLOAD(TCUR); END;
+      // Del desplegable a l'interior: TIDX dona el id de magnitud i TCONV
+      // porta el valor a la unitat en que esta tabulada la substancia. Cal
+      // fer-ho DESPRES del TLOAD, perque TCONV mira TMD.
+      zi1 := TIDX(TD1); zw1 := TCONV(TD1, TV1);
+      zi2 := TIDX(TD2); zw2 := TCONV(TD2, TV2);
+      IF zi1 == zi2 THEN
+        MSGBOX("Tria dues magnituds DIFERENTS.");
+      ELSE
+        // S'ordena el parell per index: tant se val en quin ordre s'hagin
+        // triat les dues magnituds.
+        IF zi1 > zi2 THEN
+          zsw := zi1; zi1 := zi2; zi2 := zsw;
+          zsw := zw1; zw1 := zw2; zw2 := zsw;
+        END;
+
+        // index: 1=P 2=T 3=x 4=v 5=u 6=h 7=s
+        zst := {0,0,0,0,0,0,0,-1,"parell no suportat"};
+        CASE
+          IF zi1 == 1 AND zi2 == 2 THEN zst := TPT(zw1, zw2); END;
+          IF zi1 == 1 AND zi2 == 3 THEN zst := TPX(zw1, zw2); END;
+          IF zi1 == 2 AND zi2 == 3 THEN zst := TTX(zw1, zw2); END;
+          IF zi1 == 1 AND zi2 >= 4 THEN zst := TPY(zw1, zi2-3, zw2); END;
+          IF zi1 == 2 AND zi2 >= 4 THEN zst := TTY(zw1, zi2-3, zw2); END;
+          DEFAULT
+            zst := {0,0,0,0,0,0,0,-1,
+                    "cal donar P o T amb una altra magnitud"};
+        END;
+
+        // Els dos ultims estats es desen sols, per al salt 1->2.
+        IF zst(8) >= 0 THEN
+          TS1 := TS2;
+          TS2 := zst;
+        END;
+
+        zk := TSHOW(zst);
+        // Qualsevol tecla torna al formulari (el bucle continua). Nomes
+        // tres fan una altra cosa; si algun codi no fos correcte, aquella
+        // tecla cauria al cas per defecte i tornaria al formulari.
+        IF zk == TKHELP THEN TAJUDA(); END;
+        IF zk == TKESC THEN zgo := 0; END;
+        IF zk == TKVIEW THEN
+          zopt := 1;
+          IF CHOOSE(zopt, "TERMO", "Nou calcul", "Salt estat 1 -> 2",
+                    "Ajuda", "Sortir") <> 0 THEN
+            IF zopt == 2 THEN TDELTA(); END;
+            IF zopt == 3 THEN TAJUDA(); END;
+            IF zopt == 4 THEN zgo := 0; END;
+          END;
+        END;
+      END;
+    END;
+  END;
+  RETURN zst;
+END;
+
+// Comparacio rapida dels dos estats desats (proces 1 -> 2):
+// dona els salts que es demanen sempre en un balanc.
+EXPORT TDELTA()
+BEGIN
+  LOCAL zy, za, zb;
+  // Es copien a locals ABANS d'indexar-les. Indexar directament una variable
+  // global que el compilador no te clar que sigui una llista es llegeix com
+  // una crida a funcio i no compila.
+  za := TS1; zb := TS2;
+  IF SIZE(za) < 9 OR SIZE(zb) < 9 THEN
+    MSGBOX("Calcula DOS estats amb TERMO() i torna a provar.");
+    RETURN 0;
+  END;
+  RECT();
+  TEXTOUT_P("SALT DEL ESTAT 1 AL 2", 4, 2, 3, RGB(0,0,180));
+  TEXTOUT_P("1:  T=" + TDEC(za(1),2) + "   P=" + TSIG(za(2),5) +
+            "   h=" + TDEC(za(5),2), 4, 26, 2);
+  TEXTOUT_P("2:  T=" + TDEC(zb(1),2) + "   P=" + TSIG(zb(2),5) +
+            "   h=" + TDEC(zb(5),2), 4, 44, 2);
+  zy := 68;
+  TEXTOUT_P("dh = " + TDEC(zb(5)-za(5),2) + " kJ/kg", 4, zy, 3); zy := zy + 25;
+  TEXTOUT_P("du = " + TDEC(zb(4)-za(4),2) + " kJ/kg", 4, zy, 3); zy := zy + 25;
+  TEXTOUT_P("ds = " + TDEC(zb(6)-za(6),4) + " kJ/kgK", 4, zy, 3); zy := zy + 25;
+  TEXTOUT_P("dv = " + TSIG(zb(3)-za(3),5) + " m3/kg", 4, zy, 3); zy := zy + 25;
+  TEXTOUT_P("dT = " + TDEC(zb(1)-za(1),2), 4, zy, 3); zy := zy + 25;
+  TEXTOUT_P("dP = " + TSIG(zb(2)-za(2),5) + " MPa", 4, zy, 3);
+  TEXTOUT_P("Prem una tecla per tornar", 4, 220, 2);
+  TPAUSE();
+  RETURN 1;
+END;
+
+// ====== GANXOS DE LA APP (ve de ppl/APP_TAULES.hpprgm) ======
+EXPORT START()
+BEGIN
+  TERMO();
+END;
+
+// La tecla [Num] tambe hi entra: es la mes gran i facil de trobar.
+EXPORT Num()
+BEGIN
+  TERMO();
+END;
+
+// [Shift][Apps] mostra aquesta nota. Info() nomes admet PRINT.
+EXPORT Info()
+BEGIN
+  LOCAL zi;
+  // Recorre la MATEIXA llista que dibuixa [Help], per no tenir dos textos
+  // d'ajuda que se separin amb el temps. Info() nomes admet PRINT.
+  PRINT();
+  PRINT("TAULES - propietats termodinamiques");
+  PRINT("");
+  FOR zi FROM 1 TO SIZE(TAJUT) DO
+    PRINT(TAJUT(zi));
+  END;
+END;
+
+// Torna a deixar-ho tot com al principi.
+EXPORT RESET()
+BEGIN
+  TCUR := 1;
+  TD1 := 1;
+  TD2 := 6;
+  TV1 := 0;
+  TV2 := 0;
+  TS1 := {};
+  TS2 := {};
+  TLOAD(TCUR);
+END;
+
+// No hi ha blocs VIEW a proposit. START() engega TERMO(), que es queda amb
+// el teclat mentre dura, aixi que les tecles de vista no arriben mai a
+// l'app: es TERMO qui les llegeix a la pantalla de resultats (qualsevol
+// tecla torna al formulari, [View] obre el menu, [Help] l'ajuda, [Esc] surt).
