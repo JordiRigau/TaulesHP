@@ -12,7 +12,6 @@ data/
 
 # ficheros PPL que llevan los datos dentro
 ppl/TDAT_*.hpprgm
-ppl/compacte/TDAT.hpprgm
 ppl/compacte/TDAT.txt
 
 # ppl/txt/ son copias exactas de ppl/*.hpprgm, generadas

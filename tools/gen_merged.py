@@ -129,10 +129,11 @@ def main(argv):
                      ('TAULES_APP_LIB', taules_lib),
                      ('TERMOLIB', io.open(os.path.join(PPL, 'TERMOLIB.hpprgm'),
                                           encoding='utf-8').read())):
-        for ext in ('.hpprgm', '.txt'):
-            with io.open(os.path.join(OUT, nom + ext), 'w',
-                         encoding='utf-8') as f:
-                f.write(txt)
+        # Solo .txt: es lo que se pega en el editor del Connectivity Kit.
+        # El .hpprgm de verdad es binario y lo escribe el CK al guardar.
+        with io.open(os.path.join(OUT, nom + '.txt'), 'w',
+                     encoding='utf-8') as f:
+            f.write(txt)
 
     print('ppl/compacte/  -- %d substancies' % len(hechos))
     print('-' * 58)

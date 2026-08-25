@@ -1,0 +1,5 @@
+# Solo el pipeline de datos necesita dependencias externas.
+# El motor de referencia y los tres bancos de pruebas son stdlib puro.
+
+pdfplumber      # tools/extract_pdf.py  -- leer el PDF de tablas
+Pillow          # tools/gen_icon.py     -- generar el icono de la app (una vez)

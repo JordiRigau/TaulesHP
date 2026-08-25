@@ -217,7 +217,7 @@ def test_merged_matches(subs):
     Es un fitxer generat a part, i si algun dia es toca un dels dos camins
     sense l'altre, aqui es veu de seguida.
     """
-    mp = os.path.join(PPLDIR, 'compacte', 'TDAT.hpprgm')
+    mp = os.path.join(PPLDIR, 'compacte', 'TDAT.txt')
     if not os.path.isfile(mp):
         return
     merged = io.open(mp, encoding='utf-8').read()
@@ -231,7 +231,7 @@ def test_merged_matches(subs):
             if line.startswith('EXPORT') and line not in merged:
                 falta += 1
     note(falta == 0,
-         'compacte/TDAT.hpprgm: %d blocs de dades no coincideixen' % falta)
+         'compacte/TDAT.txt: %d blocs de dades no coincideixen' % falta)
 
 
 def main():

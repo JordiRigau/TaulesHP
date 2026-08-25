@@ -141,11 +141,12 @@ def main():
     L.append('Es el trabajo de una turbina isentrópica de 3 MPa y 350 °C hasta '
              '75 kPa: **w = −Δh = %.2f kJ/kg**.' % (s1['h'] - s2['h']))
     L.append('')
-    L.append('## Lo que aún falta')
+    L.append('## Y en el PC')
     L.append('')
-    L.append('**La prueba de aceptación de verdad**: 3-5 problemas ya resueltos de '
-             'la asignatura, de principio a fin. Si no reproduce las soluciones '
-             'oficiales, la app no sirve por muy verdes que estén estas pruebas.')
+    L.append('Estos casos comprueban que la calculadora hace lo mismo que el '
+             'motor de referencia. Que el motor **acierte** lo decide '
+             '`tests/test_aceptacion.py`, que rehace problemas ya resueltos de '
+             'la asignatura contra su solución oficial.')
 
     with io.open(OUT, 'w', encoding='utf-8') as f:
         f.write('\n'.join(L) + '\n')

@@ -57,6 +57,6 @@ dP = -2.92500 MPa
 
 Es el trabajo de una turbina isentrópica de 3 MPa y 350 °C hasta 75 kPa: **w = −Δh = 713.05 kJ/kg**.
 
-## Lo que aún falta
+## Y en el PC
 
-**La prueba de aceptación de verdad**: 3-5 problemas ya resueltos de la asignatura, de principio a fin. Si no reproduce las soluciones oficiales, la app no sirve por muy verdes que estén estas pruebas.
+Estos casos comprueban que la calculadora hace lo mismo que el motor de referencia. Que el motor **acierte** lo decide `tests/test_aceptacion.py`, que rehace problemas ya resueltos de la asignatura contra su solución oficial.
