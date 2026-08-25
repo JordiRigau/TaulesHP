@@ -454,6 +454,21 @@ Con P < P_c y T > T_c el estado es vapor sobrecalentado corriente, no
 supercrítico: la región la decide **la presión**. Confundirlo rompió un test de
 enrutado y sirvió para acotarlo bien.
 
+> **El arreglo se quedó a medias, y tardó en verse.** Entró en el motor de
+> Python y en el camino `(P,T)` del PPL, pero no en el de `(P,y)`: `TPY`
+> seguía yendo a la tabla de saturación, que por encima de P_c no existe, y
+> devolvía *«P fora de rang»*. Las mismas 30 isóbaras. En la calculadora eso
+> significaba que a 25 MPa el agua se podía consultar por (P,T) pero no por
+> (P,h) ni por (P,s) — y (P,s) es justo la expansión isentrópica de un ciclo
+> Rankine supercrítico.
+>
+> No lo veía ninguna prueba: `test_engine.py` sólo mira el motor de Python,
+> `test_ppl_layout.py` sólo la aritmética de índices, y la de aceptación
+> comprueba la estructura de ramas supercríticas pero no consulta por
+> entalpía a esas presiones. Apareció al **ejecutar el PPL de verdad** y
+> compararlo con el motor: 2.060 comparaciones coincidían y 102 no, todas la
+> misma.
+
 #### 2. El corte líquido/vapor se buscaba por el salto de volumen
 
 Cada isóbara del PDF trae, seguidas, las filas de líquido subenfriado, las dos

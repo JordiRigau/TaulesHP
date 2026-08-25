@@ -347,6 +347,18 @@ BEGIN
   LOCAL zsa, zyf, zyg, zx, zt, zr;
   LOCAL zreg, zav;
   TERR := "";
+  // Per sobre de la pressio critica no hi ha corba de saturacio: no hi ha
+  // y_f ni y_g amb que decidir la regio, i TSATP torna {}. S'inverteix
+  // directament dins la isobara, que alli es una rama continua. Regio 3 =
+  // supercritic, com a TPT i TTY.
+  IF TMD(5) > 0 AND zp > TMD(5) THEN
+    zt := TINVP(zp, zpr, zy, 3);
+    IF zt == -99999 THEN RETURN {0,0,0,0,0,0,0,-1,TERR}; END;
+    zr := TSPH(zp, zt, 2);
+    zav := TERR;
+    IF SIZE(zr) == 0 THEN RETURN {0,0,0,0,0,0,0,-1,TERR}; END;
+    RETURN {zt, zp, zr(1), zr(2), zr(3), zr(4), -1, 3, zav};
+  END;
   zsa := TSATP(zp);
   IF SIZE(zsa) == 0 THEN RETURN {0,0,0,0,0,0,0,-1,TERR}; END;
   zyf := zsa(1 + 2*zpr); zyg := zsa(2 + 2*zpr);
@@ -376,6 +388,11 @@ BEGIN
   zph := 1;
   IF zreg == 0 THEN zph := 0; END;
   IF zreg == 2 THEN zph := 2; END;
+  // Per sobre de Pc la isobara es UNA rama continua i l'index la desa amb
+  // TIX(k,4) == TIX(k,3): no hi ha rama vapor separada, aixi que demanar-la
+  // deixava l'interval de cerca buit. Es llegeix sense exigir fase, igual
+  // que fa TTY amb zfa := 2.
+  IF zreg == 3 THEN zph := 2; END;
   zd := DIM(TIX); zm := zd(1);
   // Se acota con LAS MISMAS isobaras que usara el calculo directo (las que
   // encierran P, o la exacta si esta tabulada). Usar mas isobaras estrecharia
