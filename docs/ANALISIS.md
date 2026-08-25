@@ -411,6 +411,31 @@ como lo hace `TERMO.hpprgm` y lo compara con el motor. Un desfase de una fila
 aparece aquí, en el PC, y no en el examen. Verifica además que ningún valor
 pierde precisión al serializarse (peor desviación relativa < 1e-15).
 
+### Conformidad — `tests/test_ppl_motor.py` (2223 comprobaciones, en verde)
+
+Los tres arneses de arriba tienen un punto ciego en común: **ninguno ejecuta
+`ppl/TERMOLIB.hpprgm`**. `test_engine.py` prueba el motor de Python;
+`test_ppl_layout.py` prueba la aritmética de índices *reimplementándola* en
+Python; `test_aceptacion.py` prueba que el motor de Python reproduce las
+soluciones del profesor.
+
+Ahí cabe una clase entera de fallos: que el PPL y el Python calculen cosas
+distintas. Cada uno es coherente consigo mismo, los dos pasan sus pruebas, y
+la calculadora da un resultado que el PC no da.
+
+Este arnés interpreta el PPL en el PC —con el intérprete de
+[hp-prime-kit](https://github.com/JordiRigau/hp-prime-kit)— y compara sus
+resultados con el motor sobre casos sacados de los propios datos: nodos
+tabulados, puntos entre dos nodos e inversas desde cada nodo. Compara también
+los **errores**: que los dos se nieguen en los mismos sitios es la mitad del
+valor.
+
+Es opcional. Sin el intérprete instalado se salta en vez de fallar, así que el
+repositorio sigue siendo autocontenido con sus tres arneses.
+
+Encontró el fallo de `TPY` con la región supercrítica (§6, más arriba): 2060
+comparaciones coincidían y 102 no, todas la misma causa.
+
 ### Aceptación — `tests/test_aceptacion.py` (42 comprobaciones, en verde)
 
 La única prueba que puede decir si la app **sirve**. Las otras dos verifican
@@ -467,7 +492,8 @@ enrutado y sirvió para acotarlo bien.
 > comprueba la estructura de ramas supercríticas pero no consulta por
 > entalpía a esas presiones. Apareció al **ejecutar el PPL de verdad** y
 > compararlo con el motor: 2.060 comparaciones coincidían y 102 no, todas la
-> misma.
+> misma. Eso es ahora `tests/test_ppl_motor.py`, que además comprueba las 30
+> isóbaras supercríticas una por una para que no vuelva a colarse.
 
 #### 2. El corte líquido/vapor se buscaba por el salto de volumen
 

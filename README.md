@@ -24,8 +24,9 @@ Dada 2 [ T [C]    v]  = [ 350      ]           h = 3116.06    s = 6.7449
 ```
 
 **Estado: terminado y en uso.** Funciona en una G2 real (firmware 2.4.15515),
-1599 pruebas en verde y contrastado contra las soluciones oficiales del
-profesor con una desviación máxima del 1,3 %.
+1599 pruebas en verde —más 2223 si se ejecuta el PPL de verdad— y contrastado
+contra las soluciones oficiales del profesor con una desviación máxima del
+1,3 %.
 
 ---
 
@@ -111,6 +112,18 @@ no pueden ver:
 | Motor — `tests/test_engine.py` | 549 | nodos tabulados, tablas publicadas (Çengel/NIST) y el cálculo a mano rehecho aparte | errores de algoritmo |
 | Capa de datos PPL — `tests/test_ppl_layout.py` | 1008 | replica la aritmética de índices de la calculadora | desfases de una fila, **en el PC y no en el examen** |
 | Aceptación — `tests/test_aceptacion.py` | 42 | problemas ya resueltos, con su solución oficial | que la app **sirva**, no que sea coherente |
+
+Y un cuarto que **ejecuta el PPL de verdad**:
+
+| | |
+|---|---|
+| Conformidad — `tests/test_ppl_motor.py` | **2223** comprobaciones: interpreta `ppl/TERMOLIB.hpprgm` en el PC y lo compara con el motor de Python sobre casos sacados de los propios datos |
+
+Caza lo que ninguno de los otros tres puede ver: que el PPL y el Python
+**calculen cosas distintas**. Cada uno es coherente consigo mismo, los dos
+pasan sus pruebas, y la app da un resultado que el PC no da. Necesita el
+intérprete de [hp-prime-kit](https://github.com/JordiRigau/hp-prime-kit); si
+no está instalado, se salta en vez de fallar.
 
 Los datos se validan aparte con criterios independientes del extractor —no
 «hizo lo que dice» sino «los números cumplen física conocida»—: **0 incidencias
@@ -227,6 +240,7 @@ ppl/       TERMOLIB.hpprgm           ← motor        (escrito a mano)
            TDAT_*.hpprgm  txt/       ← por sustancia (GENERADO)
            compacte/                 ← versión de 2 y 3 elementos (GENERADO)
 tests/     test_engine.py  test_ppl_layout.py  test_aceptacion.py
+           test_ppl_motor.py         ← ejecuta el PPL (necesita hp-prime-kit)
 docs/      ver abajo
 icon/      icon_*.png                ← icono de la app (GENERADO)
 ```
@@ -253,7 +267,7 @@ instalar la app sin tener el PDF a mano.
 Pon `Tablas_propiedades_individualizadas.pdf` en la raíz y:
 
 ```bash
-python tools/extract_pdf.py && python tools/validate.py && python tools/gen_ppl.py --all && python tools/gen_merged.py --all && python tests/test_engine.py && python tests/test_ppl_layout.py && python tests/test_aceptacion.py
+python tools/extract_pdf.py && python tools/validate.py && python tools/gen_ppl.py --all && python tools/gen_merged.py --all && python tests/test_engine.py && python tests/test_ppl_layout.py && python tests/test_aceptacion.py && python tests/test_ppl_motor.py
 ```
 
 Python 3.7+ y `pdfplumber` (ver [`requirements.txt`](requirements.txt)); el
