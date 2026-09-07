@@ -4,7 +4,7 @@
 Los otros tres arneses no pueden ver esto. test_engine.py prueba el motor de
 Python; test_ppl_layout.py prueba la ARITMETICA DE INDICES reimplementandola
 en Python; test_aceptacion.py prueba que el motor de Python reproduce las
-soluciones del profesor. Ninguno ejecuta ppl/TERMOLIB.hpprgm.
+soluciones del profesor. Ninguno ejecuta ppl/TERMOLIB.txt.
 
 Y ahi cabe una clase entera de fallos: que el PPL y el Python calculen cosas
 distintas. Cada uno es coherente consigo mismo, los dos pasan sus pruebas, y
@@ -42,30 +42,32 @@ def note(ok, msg):
 
 
 def busca_interprete():
-    """Donde puede estar pplrun.py, de mas especifico a mas general."""
+    """Donde puede estar el paquete hpkit, de mas especifico a mas general.
+
+    El kit es un repositorio con hpkit/ en la raiz; se anade esa raiz al
+    sys.path y se importa hpkit.interp.
+    """
     candidatos = []
     if os.environ.get('HP_PRIME_KIT'):
-        candidatos.append(os.path.join(os.environ['HP_PRIME_KIT'], 'scripts'))
+        candidatos.append(os.environ['HP_PRIME_KIT'])
     candidatos += [
-        os.path.join(os.path.expanduser('~'), '.claude', 'skills',
-                     'hp-prime', 'scripts'),
-        os.path.join(os.path.dirname(ROOT), 'hp-prime-kit', 'scripts'),
-        os.path.join(ROOT, 'tools'),
+        os.path.join(os.path.expanduser('~'), '.claude', 'skills', 'hp-prime'),
+        os.path.join(os.path.dirname(ROOT), 'hp-prime-kit'),
     ]
     for d in candidatos:
-        if os.path.isfile(os.path.join(d, 'pplrun.py')):
+        if os.path.isfile(os.path.join(d, 'hpkit', 'interp.py')):
             return d
     return None
 
 
-def carga_ppl(pplrun):
-    """Lo mismo que se pega en la calculadora, en orden de compilacion."""
-    m = pplrun.Maquina()
-    m.carga_fichero(os.path.join(PPLDIR, 'TDAT_REG.hpprgm'))
-    for f in sorted(glob.glob(os.path.join(PPLDIR, 'TDAT_*.hpprgm'))):
-        if not f.endswith('REG.hpprgm'):
-            m.carga_fichero(f)
-    m.carga_fichero(os.path.join(PPLDIR, 'TERMOLIB.hpprgm'))
+def carga_ppl(interp):
+    """Lo mismo que se instala en la calculadora, en orden de compilacion."""
+    m = interp.Machine()
+    m.load_file(os.path.join(PPLDIR, 'TDAT_REG.txt'))
+    for f in sorted(glob.glob(os.path.join(PPLDIR, 'TDAT_*.txt'))):
+        if not f.endswith('REG.txt'):
+            m.load_file(f)
+    m.load_file(os.path.join(PPLDIR, 'TERMOLIB.txt'))
     return m
 
 
@@ -123,7 +125,7 @@ def barrido(m, orden):
     subs = E.substances()
     for key in sorted(orden):
         sub = subs[key]
-        m.llama('TLOAD', float(orden[key]))
+        m.call('TLOAD', float(orden[key]))
         etq = key[:6]
 
         filas = sub['sat_by_T']
@@ -131,7 +133,7 @@ def barrido(m, orden):
             T = fila['T']
             for x in (0.0, 0.5, 1.0):
                 compara('%s TTX(%.4g,%.1f)' % (etq, T, x),
-                        seguro(m.llama, 'TTX', T, x),
+                        seguro(m.call, 'TTX', T, x),
                         seguro(E.state_Tx, sub, T, x))
 
         filas = sub['sat_by_P']
@@ -139,7 +141,7 @@ def barrido(m, orden):
             P = fila['P']
             for x in (0.0, 1.0):
                 compara('%s TPX(%.4g,%.1f)' % (etq, P, x),
-                        seguro(m.llama, 'TPX', P, x),
+                        seguro(m.call, 'TPX', P, x),
                         seguro(E.state_Px, sub, P, x))
 
         for b in sub['isobars'][::max(1, len(sub['isobars']) // 5)]:
@@ -149,12 +151,12 @@ def barrido(m, orden):
                 for T in (rows[j]['T'],
                           (rows[j]['T'] + rows[j + 1]['T']) / 2.0):
                     compara('%s TPT(%.6g,%.6g)' % (etq, P, T),
-                            seguro(m.llama, 'TPT', P, T),
+                            seguro(m.call, 'TPT', P, T),
                             seguro(E.state_PT, sub, P, T))
                 for pr, k in ((3, 'h'), (4, 's')):
                     y = rows[j][k]
                     compara('%s TPY(%.6g,%s,%.8g)' % (etq, P, k, y),
-                            seguro(m.llama, 'TPY', P, float(pr), y),
+                            seguro(m.call, 'TPY', P, float(pr), y),
                             seguro(E.state_Py, sub, P, k, y))
 
 
@@ -177,14 +179,14 @@ def regresion_supercritica(m, orden):
         Pc = sub['Pc_MPa']
         if not Pc:
             continue
-        m.llama('TLOAD', float(orden[key]))
+        m.call('TLOAD', float(orden[key]))
         for b in sub['isobars']:
             if b['P'] <= Pc:
                 continue
             n += 1
             fila = b['rows'][len(b['rows']) // 2]
             for pr, k in ((3, 'h'), (4, 's')):
-                st = seguro(m.llama, 'TPY', b['P'], float(pr), fila[k])
+                st = seguro(m.call, 'TPY', b['P'], float(pr), fila[k])
                 nom = ('%s TPY supercritica P=%g %s=%.8g'
                        % (key[:6], b['P'], k, fila[k]))
                 if st is None:
@@ -205,22 +207,22 @@ def regresion_supercritica(m, orden):
 def main():
     d = busca_interprete()
     if d is None:
-        print('SALTADA: no se encuentra el interprete de PPL (pplrun.py).')
+        print('SALTADA: no se encuentra el interprete de PPL (hpkit).')
         print('  Es opcional. Para tenerlo:')
         print('    git clone https://github.com/JordiRigau/hp-prime-kit.git'
               ' ~/.claude/skills/hp-prime')
         print('  o define HP_PRIME_KIT apuntando a donde lo tengas clonado.')
         return 0
-    if not glob.glob(os.path.join(PPLDIR, 'TDAT_*.hpprgm')):
+    if not glob.glob(os.path.join(PPLDIR, 'TDAT_*.txt')):
         print('No hay ficheros generados: ejecuta tools/gen_ppl.py')
         return 1
 
     sys.path.insert(0, d)
-    import pplrun
+    from hpkit import interp
 
-    m = carga_ppl(pplrun)
+    m = carga_ppl(interp)
     orden = {}
-    for i, k6 in enumerate(m.globales['TSUBS'], 1):
+    for i, k6 in enumerate(m.globals_['TSUBS'], 1):
         for key in E.substances():
             if key[:6] == k6:
                 orden[key] = i

@@ -1,0 +1,189 @@
+// ===================================================================
+// MENU - pantalla d'inici de l'app TAULES  (HP Prime G2)
+//
+// Tres botons grossos: les taules de substancies, que es el que ja hi havia,
+// i les dues pantalles de metodes generalitzats.
+//
+// CADA BOTO RESPON A DUES COSES: al dit i a la tecla del seu numero, que
+// porta dibuixada a dins. No es un adorn. El tacte arriba per MOUSE, i MOUSE
+// no es pot executar al PC -l'interpret del kit no el porta-, aixi que la via
+// del dit NOMES la pot confirmar algu amb la calculadora a la ma. La via de
+// la tecla si que s'executa aqui. Si el dit no anes, els tres botons segueixen
+// funcionant amb 1, 2 i 3, que es per aixo que la tecla surt dibuixada.
+//
+// La geometria viu a TMBTN i el encert a TMHIT, separats del dibuix a
+// proposit: aixi una prova del PC pot comprovar que cada zona sensible cau
+// on es veu el boto, sense pintar res.
+// ===================================================================
+
+// Nombre de botons i etiquetes. Una llista amb contingut es pot indexar des
+// d'un altre programa; una de buida ha fallat. Aquestes van plenes.
+EXPORT TMTIT:={"TAULES", "GAS REAL", "PROCES REAL"};
+EXPORT TMSUB:={"propietats d'una substancia",
+               "un estat: Z, v i discrepancies",
+               "dos estats: dh, ds i du"};
+
+// Estat del debounce del tacte. Comenca a 1 -"hi ha un dit"- a proposit:
+// el toc que tanca un dialeg arriba una segona vegada a la pantalla de sota,
+// i sense aixo obriria tot sol el boto que hi hagi a sota del boto OK.
+EXPORT TMDOWN:=1;
+
+// ---- geometria ------------------------------------------------------
+// Boto zi (1..3): {x1, y1, x2, y2}. Tres de 52 px separats 8, des de y=32:
+// l'ultim acaba a 204 i el peu a 216, dins de l'area d'app, que va fins a
+// 212 abans de la fila de tecles de pantalla.
+EXPORT TMBTN(zi)
+BEGIN
+  LOCAL zy;
+  zy := 32 + (zi - 1)*60;
+  RETURN {6, zy, 314, zy + 52};
+END;
+
+// Quin boto cau sota (zx, zy). 0 si cap, i tambe si no hi ha tacte, que
+// arriba com a (-1, -1).
+EXPORT TMHIT(zx, zy)
+BEGIN
+  LOCAL zi, zr;
+  IF zx < 0 OR zy < 0 THEN RETURN 0; END;
+  FOR zi FROM 1 TO SIZE(TMTIT) DO
+    zr := TMBTN(zi);
+    IF zx >= zr(1) AND zx <= zr(3) AND zy >= zr(2) AND zy <= zr(4) THEN
+      RETURN zi;
+    END;
+  END;
+  RETURN 0;
+END;
+
+// ---- tacte ----------------------------------------------------------
+// {x, y} de l'ultim contacte, o {-1,-1} si no n'hi ha.
+//
+// Tot va dins d'un IFERR i cada llista es mira amb SIZE abans d'indexar-la.
+// No es per elegancia: MOUSE torna llistes dins de llistes i si algun dia
+// tornes una altra cosa, o no hi es, el menu ha de seguir obrint-se amb les
+// tecles en comptes de quedar-se penjat.
+EXPORT TMTOUCH()
+BEGIN
+  LOCAL zm, zp, zx, zy;
+  zx := -1;
+  zy := -1;
+  IFERR
+    zm := MOUSE;
+    IF SIZE(zm) >= 1 THEN
+      zp := zm(1);
+      IF SIZE(zp) >= 2 THEN
+        zx := zp(1);
+        zy := zp(2);
+      END;
+    END;
+  THEN
+    zx := -1;
+    zy := -1;
+  END;
+  RETURN {zx, zy};
+END;
+
+// Un toc = una accio. Torna el boto nomes al PRIMER contacte d'un toc nou;
+// mentre el dit segueix a sobre torna 0, perque la pantalla es llegeix
+// desenes de vegades per segon i si no, un toc obriria la pantalla, tornaria,
+// i la tornaria a obrir.
+EXPORT TMTAP()
+BEGIN
+  LOCAL zt, zb;
+  zt := TMTOUCH();
+  IF zt(1) < 0 THEN
+    TMDOWN := 0;
+    RETURN 0;
+  END;
+  IF TMDOWN == 1 THEN RETURN 0; END;
+  TMDOWN := 1;
+  zb := TMHIT(zt(1), zt(2));
+  RETURN zb;
+END;
+
+// ---- dibuix ---------------------------------------------------------
+EXPORT TMDRAW()
+BEGIN
+  LOCAL zi, zr, zt;
+  RECT();
+  TEXTOUT_P("TERMODINAMICA", 6, 4, 3, RGB(0,0,140), 308);
+  FOR zi FROM 1 TO SIZE(TMTIT) DO
+    zr := TMBTN(zi);
+    RECT_P(zr(1), zr(2), zr(3), zr(4), RGB(0,0,140), RGB(228,236,252));
+    zt := TMTIT;
+    TEXTOUT_P(STRING(zi) + ".  " + zt(zi), zr(1) + 12, zr(2) + 7, 3,
+              RGB(0,0,140), 284);
+    zt := TMSUB;
+    TEXTOUT_P(zt(zi), zr(1) + 12, zr(2) + 31, 2, RGB(70,70,70), 284);
+  END;
+  TEXTOUT_P("toca el boto o prem 1/2/3    Help=ajuda   Esc=surt",
+            6, 216, 2, RGB(70,70,70), 308);
+  RETURN 1;
+END;
+
+// ---- bucle ----------------------------------------------------------
+// Codis de tecla: son POSICIONS al teclat, no ASCII. 42, 43 i 44 son l'1, el
+// 2 i el 3 de la fila de baix. Els d'Esc i Help venen de TERMO, que ja els
+// te mesurats. Una tecla desconeguda no fa res, que es el que ha de fer.
+EXPORT TMK1:=42;
+EXPORT TMK2:=43;
+EXPORT TMK3:=44;
+
+EXPORT TMENU()
+BEGIN
+  LOCAL zgo, zk, zb;
+  zgo := 1;
+  // Purga: el toc que ha obert l'app encara pot estar a la pantalla.
+  TMDOWN := 1;
+  WHILE zgo == 1 DO
+    TMDRAW();
+    zb := 0;
+    WHILE zb == 0 AND zgo == 1 DO
+      zk := GETKEY;
+      IF zk == TMK1 THEN zb := 1; END;
+      IF zk == TMK2 THEN zb := 2; END;
+      IF zk == TMK3 THEN zb := 3; END;
+      IF zk == TKESC THEN zgo := 0; END;
+      IF zk == TKHELP THEN zb := 4; END;
+      IF zb == 0 THEN zb := TMTAP(); END;
+    END;
+    IF zb == 1 THEN TERMO(); END;
+    IF zb == 2 THEN TGTAB(); END;
+    IF zb == 3 THEN TGPROC(); END;
+    IF zb == 4 THEN TMAJUDA(); END;
+    // Purga en tornar de QUALSEVOL pantalla, en un sol lloc, perque cap no
+    // se'n pugui oblidar.
+    TMDOWN := 1;
+  END;
+  RETURN 1;
+END;
+
+// ---- ajuda ----------------------------------------------------------
+EXPORT TMAJUT:={
+  "1  TAULES",
+  "   Les 14 substancies del PDF de taules: dones",
+  "   dues magnituds i dona l'estat sencer.",
+  "2 i 3  GAS REAL: quan no hi ha taula i l'enunciat",
+  "   dona Tc, Pc i w. Es el que l'examen anomena",
+  "   metodes generalitzats o correlacions de Pitzer.",
+  "2  UN estat: Z, el volum i les discrepancies.",
+  "3  DOS estats: dh, ds i du, que es el que demana",
+  "   el balanc. Les constants es recorden.",
+  "Cada boto respon al dit i a la seva tecla.",
+  "Dins de cada pantalla: Help=ajuda, Esc=torna."
+};
+
+EXPORT TMAJUDA()
+BEGIN
+  LOCAL zy, zi, zt;
+  RECT();
+  TEXTOUT_P("TERMODINAMICA - ajuda", 4, 2, 3, RGB(0,0,180), 316);
+  zy := 26;
+  zt := TMAJUT;
+  FOR zi FROM 1 TO SIZE(zt) DO
+    TEXTOUT_P(zt(zi), 4, zy, 2, RGB(0,0,0), 316);
+    zy := zy + 17;
+  END;
+  TEXTOUT_P("Prem una tecla per tornar", 4, 218, 2, RGB(0,0,0), 316);
+  TPAUSE();
+  RETURN 1;
+END;

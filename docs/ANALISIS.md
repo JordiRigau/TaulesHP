@@ -118,8 +118,9 @@ Tablas_propiedades_individualizadas.pdf
         │  tools/model.py           (normaliza puras/mezclas, deduplica)
         ├─► tools/validate.py  → data/validation_report.txt
         ├─► tools/engine.py    → motor de referencia en Python
-        ├─► tools/gen_ppl.py    → ppl/TDAT_*.hpprgm   (uno por sustancia)
+        ├─► tools/gen_ppl.py    → ppl/TDAT_*.txt      (uno por sustancia)
         └─► tools/gen_merged.py → ppl/compacte/       (2 o 3 elementos)
+                └─► tools/build_hp.py   → ppl/build/<variante>/  (.hpprgm y .hpappdir)
 ```
 
 ### Averías del PDF que hubo que resolver (todas silenciosas)
@@ -356,15 +357,35 @@ Sólo el código de `[Enter]` (30) está confirmado; los otros tres están
 deducidos. El diseño falla de forma segura: una tecla con código equivocado cae
 en el caso por defecto, que es volver al formulario.
 
-### Estados guardados
+### Estados guardados: se hicieron, y se quitaron
 
-Los **dos últimos estados calculados se guardan solos** en `TS1`/`TS2`: el
-anterior es el estado 1 y el nuevo el 2. El *Salt estat 1 → 2* del menú da Δh,
-Δu, Δs, Δv, ΔT y ΔP de golpe, que es lo que pide cualquier balance.
+Durante un tiempo la app guardaba sola los dos últimos estados en `TS1`/`TS2`
+y el menú ofrecía un *Salt estat 1 → 2* que daba Δh, Δu, Δs, Δv, ΔT y ΔP de
+golpe. Funcionaba, y aun así se ha eliminado.
 
-Antes había que pulsar `1` o `2` para guardarlos, pero eso dependía del código
-de tecla que devuelve `WAIT(-1)`, que **no es el ASCII** sino un identificador
-de posición. Guardarlos solos ahorra pulsaciones y elimina el problema.
+El motivo es que resolvía la mitad barata del problema. Lo que se encadena de
+verdad entre dos estados no es la resta —esa se hace de cabeza— sino que **una
+propiedad del primero es el segundo dato del segundo**: la entropía en una
+turbina isentrópica, la entalpía en una válvula. Eso ya lo hace la búsqueda
+inversa, que es la parte cara. Encima obligaba a recordar cuál de los dos
+estados había quedado como 1, y equivocarse ahí cambia todos los signos sin
+avisar.
+
+Queda como nota de diseño porque el error es fácil de repetir: una función
+que ahorra pulsaciones no vale por sí sola si añade un estado invisible que
+el usuario tiene que llevar en la cabeza.
+
+### La ayuda no puede salir desde el formulario
+
+`INPUT` es un diálogo del firmware y **es modal**: mientras está abierto, el
+programa no recibe ninguna tecla, así que no hay forma de atender un `[Help]`
+ahí dentro (`interface.md` §4 del kit). La ayuda se abre desde la pantalla de
+resultados, donde el teclado sí lo lee la app.
+
+Se probó a que `[Esc]` abriese un `CHOOSE` con *Ajuda* en vez de salir, y se
+descartó: convertía la tecla de salir en un menú, que es peor cambio del que
+arreglaba. La ayuda por campo —el cuarto argumento de `INPUT`, que el diálogo
+dibuja abajo— se queda como está.
 
 ---
 
@@ -406,15 +427,15 @@ Que un programa compile en la Prime no dice nada de si los índices están bien.
 Lo que más se rompe al portar a PPL es la **aritmética de índices** (matrices
 1-based, isóbaras concatenadas, ramas partidas por un contador).
 
-Este arnés **lee los `.hpprgm` generados**, replica el acceso *exactamente*
-como lo hace `TERMO.hpprgm` y lo compara con el motor. Un desfase de una fila
+Este arnés **lee los fuentes PPL generados**, replica el acceso *exactamente*
+como lo hace `TERMO.txt` y lo compara con el motor. Un desfase de una fila
 aparece aquí, en el PC, y no en el examen. Verifica además que ningún valor
 pierde precisión al serializarse (peor desviación relativa < 1e-15).
 
 ### Conformidad — `tests/test_ppl_motor.py` (2223 comprobaciones, en verde)
 
 Los tres arneses de arriba tienen un punto ciego en común: **ninguno ejecuta
-`ppl/TERMOLIB.hpprgm`**. `test_engine.py` prueba el motor de Python;
+`ppl/TERMOLIB.txt`**. `test_engine.py` prueba el motor de Python;
 `test_ppl_layout.py` prueba la aritmética de índices *reimplementándola* en
 Python; `test_aceptacion.py` prueba que el motor de Python reproduce las
 soluciones del profesor.
@@ -432,6 +453,24 @@ valor.
 
 Es opcional. Sin el intérprete instalado se salta en vez de fallar, así que el
 repositorio sigue siendo autocontenido con sus tres arneses.
+
+**La interfaz ya se puede ejecutar en el PC, y todavía no hay arnés.** El
+intérprete cubre ahora `GETKEY` y las funciones de cadena, así que `TSHOW`
+corre entero y deja cada `TEXTOUT_P` anotado: la pantalla de resultados sale
+en texto sin tocar la calculadora. Sólo hace falta redefinir `TPAUSE` después
+de cargar `TERMO.txt` —en el PC `GETKEY` siempre dice «ninguna tecla», así que
+su bucle de espera no terminaría—, lo cual es legal por la misma regla de
+siempre: el último compilado gana. De ahí salió la nota de redondeo de
+`PRUEBAS_CALCULADORA.md`: la tabla formatea con `%.2f` y la app imprime
+`STRING(ROUND(x, n))`, que no es el mismo camino.
+
+> **Y ahí está su punto débil.** El kit reorganizó su código (`scripts/pplrun.py`
+> pasó a ser el paquete `hpkit/`) y el arnés dejó de encontrarlo: se saltaba
+> solo, en silencio y con código de salida 0, mientras el README seguía diciendo
+> «2223». Una prueba que se salta sola no avisa de que lleva semanas apagada, y
+> la única señal era una línea `SALTADA` que nadie lee cuando todo sale verde.
+> Ahora busca el paquete `hpkit`, pero la lección es de método: **si algo puede
+> saltarse, hay que mirar de vez en cuando que no se esté saltando.**
 
 Encontró el fallo de `TPY` con la región supercrítica (§6, más arriba): 2060
 comparaciones coincidían y 102 no, todas la misma causa.
@@ -584,7 +623,95 @@ lo que estas tablas pueden resolver.
 
 ---
 
-## 7. Riesgos y cuellos de botella
+## 7. Métodos generalizados: por qué no hacen falta datos
+
+La sección C del libro son tres gráficos —Z, (h\*−h)/RTc y (s\*−s)/R contra Tr
+y Pr, cada uno con su familia de curvas— y en el parcial se leen a ojo. Parecía
+el mismo trabajo que la sección B: extraer, validar, compilar.
+
+**No lo es, y el motivo es que esos gráficos no son medidas.** Lee y Kesler
+(1975) publicaron una ecuación de estado tipo BWR con dos juegos de constantes
+—fluido simple y fluido de referencia, el n-octano— y las tablas de Z⁰/Z¹ y de
+las discrepancias **son su salida tabulada**. Evaluar la ecuación da los mismos
+números con más cifras de las que se pueden leer en papel, con 24 constantes en
+vez de un extractor, y sin ocupar memoria de datos.
+
+La correlación de Pitzer combina los dos fluidos para cualquier magnitud:
+
+```
+X = X⁰ + ω·X¹        X¹ = (X_ref − X⁰)/0,3978
+```
+
+### La única parte delicada: qué raíz de volumen
+
+La ecuación es cúbica de hecho, no de forma: por debajo de la crítica la
+isoterma tiene **tres raíces** en Vr —líquido, rama inestable, vapor—. Un
+Newton lanzado desde el gas ideal puede caer en cualquiera **sin avisar**, y la
+del medio no tiene sentido físico.
+
+Se resuelve barriendo **desde Vr grande hacia abajo** y quedándose con el
+primer cambio de signo, que es la raíz mayor. Es correcto en general, no por
+suerte: las tres raíces sólo aparecen por debajo de la presión de saturación,
+donde el fluido **es** vapor; por encima queda una sola, la de líquido, y el
+mismo barrido la encuentra. En los 21 casos de examen se comprobó una por una:
+20 tienen raíz única y sólo el butano a Tr = 0,80 tiene tres, con la de vapor
+como buena.
+
+`tests/test_ppl_gener.py` compara las dos implementaciones sobre la rejilla
+entera del diagrama (255 puntos, 17 valores de Tr × 15 de Pr) y sobre 27 casos
+de tres raíces. Hace falta porque **el PPL barre menos que el Python** —150
+puntos y 40 bisecciones frente a 400 y 80, para que quepa en la calculadora— y
+esa poda podría mover la raíz elegida en algún sitio.
+
+### Un agujero que tenían los dos motores
+
+Con `(T, v)` —el depósito rígido— la presión **no tiene por qué salir
+positiva**: dentro de la campana la isoterma de Lee-Kesler baja por debajo de
+cero y ahí Z ≤ 0. La discrepancia de entropía lleva un `ln Z`, que con ese
+número revienta en Python… y en la calculadora no se sabe qué hace: podría
+devolver un complejo y seguir adelante, que es un resultado *resuelto y
+equivocado*, la peor forma de fallar. Ahora los dos motores lo rechazan antes
+de llegar al logaritmo. Por `(T, P)` el caso no existe: allí Z = Pr·Vr/Tr es
+positivo por construcción.
+
+### Aceptación — `tests/test_lk_examenes.py` (21 comprobaciones, en verde)
+
+Las preguntas de «correlacions de Pitzer» y «funcions de discrepància» de los
+exámenes de 2012 a 2026. **La respuesta correcta se lee del PDF, no se teclea**:
+son tipo test y la solución oficial marca la opción buena en negrita, que
+sobrevive a la extracción porque pdfplumber da el nombre de fuente por carácter.
+
+Lo que se mide es lo que decide un test: **acertar la opción**. Las 21 la
+aciertan. La desviación respecto al número oficial es el otro dato:
+
+| | |
+|---|---|
+| Mediana | **0,10 %** |
+| Dentro del 0,2 % | 14 de 21 |
+| Dentro del 1 % | 18 de 21 |
+| Máxima | **6,6 %** (28/10/2025 q2) |
+
+Las tres mayores son las dos preguntas del 28/10/2025 (3,7 % y 6,6 %) y el
+difusor del 09/04/2025 (1,2 %). No hay motivo para pensar que sea un error del
+método: en las tres la opción correcta queda a distancia (la siguiente
+alternativa del 28/10/2025 q2 está a un factor 2,5), y la solución oficial se
+obtuvo leyendo el gráfico a ojo, que es justamente la precisión que se está
+midiendo.
+
+Dos avisos honestos sobre este banco:
+
+- **Cuatro preguntas necesitan constantes críticas que el enunciado no da**
+  (H₂S, NO, n-butano, etileno) y se han tomado de tabla publicada. Si las del
+  libro de la asignatura son otras, el resultado se mueve; están marcadas en la
+  cabecera del fichero.
+- **Varias preguntas ofrecen las opciones por parejas** —«c) 9520 kJ, −2100 kJ»
+  frente a «e) 9520 kJ, −2272 kJ»—, así que con un solo número la letra queda
+  indeterminada. El comparador mira los dos a la vez; con un solo valor, dos de
+  las 21 elegían la letra equivocada teniendo el número bien.
+
+---
+
+## 8. Riesgos y cuellos de botella
 
 | Riesgo | Estado | Mitigación |
 |---|---|---|
@@ -595,4 +722,7 @@ lo que estas tablas pueden resolver.
 | Erratas del PDF | **acotado** | 4 localizadas, todas en mercurio; validador las detecta si aparecen más |
 | Extracción poco fiable | **resuelto** | Determinista y verificada; 6 clases de avería del PDF corregidas |
 | Mezclas zeotrópicas mal modeladas | **resuelto** | 11 columnas, burbuja/rocío, unificadas con las puras |
-| Pérdida de la app (reset) | **resuelto** | Copia de `ppl/` y `master.json` en PC y nube. Restaurar: arrastrar los 3 binarios del Connectivity Kit (<1 min) o 3 pegados desde cero (~5 min) |
+| Generalizados sin probar en hardware | **abierto** | Verificados en el PC contra 21 preguntas de examen y contra `tools/lk.py` sobre la rejilla entera; falta arrastrarlos a una G2 |
+| El botón responde al dedo | **sin medir** | `MOUSE` no se puede ejecutar en el PC. Cada botón lleva su tecla dibujada dentro y la lectura de tacto va dentro de un `IFERR`: si falla, el menú sigue funcionando con 1/2/3 |
+| Tiempo de la búsqueda de raíz en la calculadora | **sin medir** | 150 evaluaciones de barrido más 40 de bisección por fluido y estado. Sólo se puede cronometrar en hardware |
+| Pérdida de la app (reset) | **resuelto** | Copia de `ppl/` y `master.json` en PC y nube. Restaurar: `gen_merged.py` + `build_hp.py` y arrastrar los 3 ficheros (<1 min), o 3 pegados desde cero si no está el kit (~5 min) |

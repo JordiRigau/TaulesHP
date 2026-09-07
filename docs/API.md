@@ -6,8 +6,13 @@ Sí, el motor es reutilizable — **pero sólo con la variante de 3 elementos**.
 
 | Variante | Elementos | ¿Otra app puede usar el motor? |
 |---|---|---|
+| 1 elemento | `TAULES` (datos y motor dentro) | ❌ no |
 | 2 elementos | `TDAT` + `TAULES` (motor dentro de la app) | ⚠️ no de forma fiable |
 | **3 elementos** | `TDAT` + **`TERMOLIB`** + `TAULES` | ✅ sí |
+
+La de 1 elemento es la que se reparte a los estudiantes: se arrastra un solo
+fichero, y a cambio todo lo que exporta queda dentro de la app. Si estás
+escribiendo otra app, no es la tuya.
 
 Lo que se exporta desde un **programa del catálogo** es global sin discusión y
 cualquier programa o app puede llamarlo. Lo que se exporta desde el programa de
@@ -16,13 +21,13 @@ usa la variante de 3: el motor se queda en su propio programa.
 
 ```bash
 python tools/gen_merged.py --all
+python tools/build_hp.py
 ```
 
-Pega `compacte/TDAT.txt`, `compacte/TERMOLIB.txt` y, en la app,
-`compacte/TAULES_APP_LIB.txt`.
+y arrastra `ppl/build/dev/TDAT.hpprgm`, `ppl/build/dev/TERMOLIB.hpprgm` y tu app.
 
 > Hay una regla de orden: un programa sólo ve las funciones de otro **si se
-> compiló después**. Pega siempre `TDAT` → `TERMOLIB` → tu app.
+> compiló después**. Instala siempre `TDAT` → `TERMOLIB` → tu app.
 
 ---
 
@@ -161,4 +166,25 @@ No hay excepciones en PPL. El convenio del motor:
 IF zst(8) < 0 THEN
   MSGBOX(zst(9));
 END;
+```
+
+## Probarlo sin calculadora
+
+El motor se puede ejecutar en el PC tal cual, sobre los mismos ficheros que
+vas a instalar, con el intérprete de
+[hp-prime-kit](https://github.com/JordiRigau/hp-prime-kit):
+
+```bash
+python ~/.claude/skills/hp-prime/hpprime.py run ppl/compacte/TDAT.txt ppl/compacte/TERMOLIB.txt --call "TLOAD(1)" --call "TPY(3,3,3116.06)"
+```
+
+No es una reimplementación: es el fichero de verdad. Lo que no cubre lo
+levanta como error en vez de inventarse un número, así que si una llamada pasa
+es que se ha ejecutado. `INPUT`, `MSGBOX` y el dibujo quedan anotados en vez de
+pintarse, de modo que un programa con interfaz también corre entero.
+
+Añade tu propio fichero a la lista y desarrollas la app entera desde el PC:
+
+```bash
+python ~/.claude/skills/hp-prime/hpprime.py run ppl/compacte/TDAT.txt ppl/compacte/TERMOLIB.txt MIAPP.txt --call "MIFUNC(1)"
 ```

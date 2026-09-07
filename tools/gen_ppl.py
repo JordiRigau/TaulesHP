@@ -124,7 +124,7 @@ def main(argv):
             print('AVISO: sustancia desconocida %r (usa --list)' % k)
             continue
         txt = gen_substance(subs[k])
-        path = os.path.join(OUTDIR, 'TDAT_%s.hpprgm' % k[:6])
+        path = os.path.join(OUTDIR, 'TDAT_%s.txt' % k[:6])
         with io.open(path, 'w', encoding='utf-8') as f:
             f.write(txt)
         total += len(txt)
@@ -132,37 +132,19 @@ def main(argv):
         print('%-28s -> %-24s %7.1f KB'
               % (subs[k]['name'], os.path.basename(path), len(txt) / 1024.0))
 
-    # Copias .txt para pegar en el editor del Connectivity Kit.
-    # Hace falta porque .hpprgm es un formato BINARIO (cabecera 7C 61 8A B2 +
-    # tabla de simbolos + fuente en UTF-16LE): un fichero de texto con esa
-    # extension NO se puede arrastrar al CK, lo rechaza. El binario lo escribe
-    # el propio CK al guardar un programa nuevo con el texto pegado dentro.
-    txtdir = os.path.join(OUTDIR, 'txt')
-    if not os.path.isdir(txtdir):
-        os.makedirs(txtdir)
-
     # registro de sustancias cargadas, para que el programa principal sepa
     # que hay disponible sin tener que probar variable por variable
     reg = ['// generado por tools/gen_ppl.py, NO EDITAR',
            'EXPORT TSUBS:={%s};' % ','.join('"%s"' % m[0] for m in made),
            'EXPORT TNAMS:={%s};' % ','.join('"%s"' % m[1].replace('"', "'")
                                             for m in made)]
-    with io.open(os.path.join(OUTDIR, 'TDAT_REG.hpprgm'), 'w',
+    with io.open(os.path.join(OUTDIR, 'TDAT_REG.txt'), 'w',
                  encoding='utf-8') as f:
         f.write('\n'.join(reg) + '\n')
 
-    # copias .txt de todo lo que hay en ppl/ (datos y codigo escrito a mano)
-    for fn in sorted(os.listdir(OUTDIR)):
-        if not fn.endswith('.hpprgm'):
-            continue
-        src = io.open(os.path.join(OUTDIR, fn), encoding='utf-8').read()
-        with io.open(os.path.join(txtdir, fn[:-7] + '.txt'), 'w',
-                     encoding='utf-8') as f:
-            f.write(src)
-
     print('-' * 60)
     print('total %.1f KB en %d sustancias' % (total / 1024.0, len(made)))
-    print('copias para pegar en el Connectivity Kit: ppl/txt/')
+    print('el .hpprgm que se arrastra a la calculadora: tools/build_hp.py')
     return 0
 
 

@@ -4,7 +4,16 @@
 Reparto:
 
     TDAT   (programa)  todas las sustancias + el registro TSUBS/TNAMS
-    TAULES (app)       motor + interfaz + ganchos de la app
+    TAULES (app)       motor + interfaz + generalizados + ganchos de la app
+
+Y una tercera, la de UN elemento, con los datos tambien dentro de la app:
+es la que se reparte a los estudiantes, porque se arrastra un solo fichero.
+
+Los metodos generalizados (ppl/GENER.txt) van SIEMPRE dentro de la app, en
+las dos variantes. No llevan datos -salen de la ecuacion de Lee-Kesler- y no
+tienen que ser accesibles desde otro programa, asi que no ganan nada
+viviendo fuera. El menu de botones (ppl/MENU.txt) es la pantalla de entrada
+y va con ellos.
 
 Por que 2 y no 1: cabe todo dentro de la app, pero entonces el programa de la
 app pasa de ~26 KB a ~330 KB y editarlo en la calculadora se vuelve incomodo.
@@ -93,44 +102,98 @@ def main(argv):
                   % ','.join('"%s"' % h[0] for h in hechos))
     partes.append('EXPORT TNAMS:={%s};'
                   % ','.join('"%s"' % h[1].replace('"', "'") for h in hechos))
+
+    # Constantes criticas, para el desplegable de los metodos generalizados.
+    # Ya estaban en master.json y no se usaban: sin esto, una pregunta que
+    # nombra la sustancia -"s'expandeix etile", 30/10/2019 y 31/10/2024- y NO
+    # da Tc, Pc ni w obliga a buscarlas fuera del aparato, que es justo lo que
+    # la app tendria que evitar.
+    #
+    # TGNOMS lleva "(manual)" delante, asi que el indice del desplegable es el
+    # de TGCRI mas uno. El acentrico del mercurio no esta en el PDF: va a 0,
+    # que es lo que hace el metodo de dos parametros.
+    partes.append('')
+    partes.append('// constants critiques: Tc[K], Pc[MPa], w, M[g/mol]')
+    partes.append('EXPORT TGNOMS:={"(manual)",%s};'
+                  % ','.join('"%s"' % subs[k]['name'].replace('"', "'")
+                             for k in keys))
+    partes.append('EXPORT TGCRI:=[%s];'
+                  % ','.join('[%s,%s,%s,%s]'
+                             % (subs[k]['Tc_K'], subs[k]['Pc_MPa'],
+                                subs[k]['omega'] or 0, subs[k]['molar_mass'])
+                             for k in keys))
     tdat = '\n'.join(partes) + '\n'
 
     # ---- 2) TAULES: motor + interficie + ganxos de la app ------------
-    lib = io.open(os.path.join(PPL, 'TERMOLIB.hpprgm'), encoding='utf-8').read()
-    ui = io.open(os.path.join(PPL, 'TERMO.hpprgm'), encoding='utf-8').read()
-    app = io.open(os.path.join(PPL, 'APP_TAULES.hpprgm'), encoding='utf-8').read()
+    lib = io.open(os.path.join(PPL, 'TERMOLIB.txt'), encoding='utf-8').read()
+    ui = io.open(os.path.join(PPL, 'TERMO.txt'), encoding='utf-8').read()
+    gen = io.open(os.path.join(PPL, 'GENER.txt'), encoding='utf-8').read()
+    men = io.open(os.path.join(PPL, 'MENU.txt'), encoding='utf-8').read()
+    app = io.open(os.path.join(PPL, 'APP_TAULES.txt'), encoding='utf-8').read()
 
-    dup = (exports(lib) & exports(ui)) | (exports(lib) & exports(app)) \
-        | (exports(ui) & exports(app))
-    if dup:
-        print('ERROR: noms exportats repetits entre fitxers: %s' % sorted(dup))
-        return 1
+    # Todos contra todos: un nombre exportado es global y dos iguales chocan.
+    # Antes eran tres piezas y bastaban tres cruces escritos a mano; con cinco
+    # serian diez, y el que se olvidara no daria error hasta la calculadora.
+    piezas = [('TERMOLIB', lib), ('TERMO', ui), ('GENER', gen),
+              ('MENU', men), ('APP_TAULES', app)]
+    for i in range(len(piezas)):
+        for j in range(i + 1, len(piezas)):
+            dup = exports(piezas[i][1]) & exports(piezas[j][1])
+            if dup:
+                print('ERROR: noms exportats repetits entre %s i %s: %s'
+                      % (piezas[i][0], piezas[j][0], sorted(dup)))
+                return 1
 
-    taules = (CAB % 'TAULES (App) - motor + interficie'
-              + '// ============ MOTOR (ve de ppl/TERMOLIB.hpprgm) ============\n'
-              + sin_cabecera(lib)
-              + '\n\n// ========= INTERFICIE (ve de ppl/TERMO.hpprgm) =========\n'
+    # Lo que va dentro de la app en las DOS variantes. Los generalizados no
+    # llevan datos -salen de la ecuacion de Lee-Kesler- y no los necesita
+    # ningun otro programa, asi que no ganan nada viviendo fuera.
+    cuerpo = ('\n\n// ========= INTERFICIE (ve de ppl/TERMO.txt) =========\n'
               + sin_cabecera(ui)
-              + '\n\n// ====== GANXOS DE LA APP (ve de ppl/APP_TAULES.hpprgm) ======\n'
+              + '\n\n// ====== GENERALITZATS (ve de ppl/GENER.txt) ======\n'
+              + sin_cabecera(gen)
+              + '\n\n// ========= MENU (ve de ppl/MENU.txt) =========\n'
+              + sin_cabecera(men)
+              + '\n\n// ====== GANXOS DE LA APP (ve de ppl/APP_TAULES.txt) ======\n'
               + sin_cabecera(app) + '\n')
 
-    # variante de 3 elementos: el motor se queda fuera, en su programa, para
-    # que otra app pueda llamarlo
-    nota_lib = ('// El motor va a part, al programa TERMOLIB, perque una altra\n'
-                '// app el pugui cridar.\n\n')
-    taules_lib = (CAB % 'TAULES (App) - nomes interficie'
-                  + nota_lib
-                  + '// ========= INTERFICIE (ve de ppl/TERMO.hpprgm) =========\n'
-                  + sin_cabecera(ui)
-                  + '\n\n// ====== GANXOS DE LA APP (ve de ppl/APP_TAULES.hpprgm) ======\n'
-                  + sin_cabecera(app) + '\n')
+    taules = (CAB % 'TAULES (App) - motor + interficie + generalitzats'
+              + '// ============ MOTOR (ve de ppl/TERMOLIB.txt) ============\n'
+              + sin_cabecera(lib)
+              + cuerpo)
+
+    # variante de 3 elementos: el motor de tablas se queda fuera, en su
+    # programa, para que otra app pueda llamarlo
+    nota_lib = ('// El motor de taules va a part, al programa TERMOLIB, perque\n'
+                '// una altra app el pugui cridar. Els generalitzats no: no\n'
+                '// porten dades i no els necessita ningu mes.\n')
+    taules_lib = (CAB % 'TAULES (App) - interficie + generalitzats'
+                  + nota_lib + cuerpo)
+
+    # variante de 1 elemento: TAMBIEN los datos dentro de la app. Es la que
+    # se reparte a los estudiantes. No gana nada tecnico -- al reves, el
+    # programa de la app pasa de 36 KB a ~364 KB y editarlo en la calculadora
+    # deja de ser comodo -- pero se arrastra UN fichero y desaparece el fallo
+    # de instalacion mas facil de cometer, que es el orden.
+    nota_tot = ('// TOT dins de l\'app: dades, motor, interficie i menu. Es\n'
+                '// la versio d\'un sol fitxer, per no haver de vigilar cap\n'
+                '// ordre d\'instal.lacio. Per desenvolupar, fes servir la de\n'
+                '// 3 elements: el motor a part es reutilitzable i el programa\n'
+                '// de l\'app es prou petit per obrir-lo a la calculadora.\n')
+    taules_tot = (CAB % 'TAULES (App) - tot dins: dades + motor + interficie'
+                  + nota_tot
+                  + '\n// ============ DADES (ve de data/master.json) ============\n'
+                  + sin_cabecera(tdat)
+                  + '\n\n// ============ MOTOR (ve de ppl/TERMOLIB.txt) ============\n'
+                  + sin_cabecera(lib)
+                  + cuerpo)
 
     for nom, txt in (('TDAT', tdat), ('TAULES_APP', taules),
                      ('TAULES_APP_LIB', taules_lib),
-                     ('TERMOLIB', io.open(os.path.join(PPL, 'TERMOLIB.hpprgm'),
+                     ('TAULES_APP_TOT', taules_tot),
+                     ('TERMOLIB', io.open(os.path.join(PPL, 'TERMOLIB.txt'),
                                           encoding='utf-8').read())):
-        # Solo .txt: es lo que se pega en el editor del Connectivity Kit.
-        # El .hpprgm de verdad es binario y lo escribe el CK al guardar.
+        # Fuente en texto. El .hpprgm binario que se arrastra a la
+        # calculadora lo escribe tools/build_hp.py desde estos ficheros.
         with io.open(os.path.join(OUT, nom + '.txt'), 'w',
                      encoding='utf-8') as f:
             f.write(txt)
@@ -141,12 +204,16 @@ def main(argv):
     print('  %-16s %7.1f KB   programa de la app'
           % ('TAULES_APP', len(taules) / 1024.0))
     print('-' * 58)
-    print('  %-16s %7.1f KB   nomes interficie (variant de 3)'
+    print('  %-16s %7.1f KB   interficie + generalitzats (variant de 3)'
           % ('TAULES_APP_LIB', len(taules_lib) / 1024.0))
     print('  %-16s %7.1f KB   motor a part (variant de 3)'
-          % ('TERMOLIB', os.path.getsize(os.path.join(PPL, 'TERMOLIB.hpprgm'))
+          % ('TERMOLIB', os.path.getsize(os.path.join(PPL, 'TERMOLIB.txt'))
              / 1024.0))
     print('-' * 58)
+    print('  %-16s %7.1f KB   TOT dins (variant d\'1, per als estudiants)'
+          % ('TAULES_APP_TOT', len(taules_tot) / 1024.0))
+    print('-' * 58)
+    print('  variant d\'1: TAULES_APP_TOT            (un sol fitxer)')
     print('  variant de 2: TDAT + TAULES_APP')
     print('  variant de 3: TDAT + TERMOLIB + TAULES_APP_LIB  (motor reutilitzable)')
     print('  en comptes de %d elements' % (len(hechos) + 4))

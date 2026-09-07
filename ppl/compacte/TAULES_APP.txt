@@ -1,9 +1,9 @@
-// TAULES (App) - motor + interficie
+// TAULES (App) - motor + interficie + generalitzats
 // GENERADO por tools/gen_merged.py -- NO EDITAR A MANO.
 // Se regenera desde data/master.json y los fuentes de ppl/.
 // ===================================================================
 
-// ============ MOTOR (ve de ppl/TERMOLIB.hpprgm) ============
+// ============ MOTOR (ve de ppl/TERMOLIB.txt) ============
 EXPORT TST, TSP, TIX, TIS, TMD;
 
 // UNA declaracio per linia i sempre en majuscules.
@@ -12,9 +12,6 @@ EXPORT TST, TSP, TIX, TIS, TMD;
 // minuscula poden xocar amb variables predefinides de Home.
 EXPORT TCUR:=1;       // index de la substancia activa dins TSUBS
 EXPORT TERR:="";      // text de l'ultim error
-EXPORT TS1:={};       // estats desats (proces 1 -> 2). Han de nomes
-EXPORT TS2:={};       // com a LLISTA: si es declaren numero, TS2(5) es llegeix
-                      // com una crida a funcio i no compila.
 
 // camps del formulari. TD1/TD2 son l'index de magnitud triat als
 // desplegables (1=P 2=T 3=x 4=v 5=u 6=h 7=s) i TV1/TV2 el seu valor.
@@ -496,7 +493,7 @@ BEGIN
   RETURN {0,0,0,0,0,0,0,-1,"valor fora del rang tabulat a aquesta T"};
 END;
 
-// ========= INTERFICIE (ve de ppl/TERMO.hpprgm) =========
+// ========= INTERFICIE (ve de ppl/TERMO.txt) =========
 EXPORT TKHELP:=3;
 EXPORT TKESC:=4;
 EXPORT TKVIEW:=9;
@@ -619,15 +616,13 @@ END;
 // Son 11 linies a proposit: amb interlineat de 17 px des de y=26, l'ultima
 // cau a 196 i el peu a 218. Afegir-ne mes les solaparia.
 EXPORT TAJUT:={
+  "QUINES DUES",
+  "Qualsevol parell de P,T,x,v,u,h,s, pero una",
+  "de les dues ha de ser P o T. El mercuri,",
+  "nomes parells que comencin per T.",
   "TEMPERATURA",
   "Hi ha T [C] i T [K] al desplegable: tria",
   "la que tinguis. Els resultats donen les dues.",
-  "SALT ENTRE ESTATS",
-  "Es recorden els DOS ultims calculs:",
-  "l'anterior es l'estat 1, el nou el 2.",
-  "El menu -> Salt 1->2 resta 2 menys 1 i dona",
-  "dh, du, ds, dv. Calcula primer l'inicial:",
-  "l'ordre decideix el signe.",
   "TECLES:  tecla=formulari   View=menu",
   "         Help=ajuda        Esc=surt"
 };
@@ -732,12 +727,6 @@ BEGIN
                     "cal donar P o T amb una altra magnitud"};
         END;
 
-        // Els dos ultims estats es desen sols, per al salt 1->2.
-        IF zst(8) >= 0 THEN
-          TS1 := TS2;
-          TS2 := zst;
-        END;
-
         zk := TSHOW(zst);
         // Qualsevol tecla torna al formulari (el bucle continua). Nomes
         // tres fan una altra cosa; si algun codi no fos correcte, aquella
@@ -746,11 +735,10 @@ BEGIN
         IF zk == TKESC THEN zgo := 0; END;
         IF zk == TKVIEW THEN
           zopt := 1;
-          IF CHOOSE(zopt, "TERMO", "Nou calcul", "Salt estat 1 -> 2",
-                    "Ajuda", "Sortir") <> 0 THEN
-            IF zopt == 2 THEN TDELTA(); END;
-            IF zopt == 3 THEN TAJUDA(); END;
-            IF zopt == 4 THEN zgo := 0; END;
+          IF CHOOSE(zopt, "TERMO", "Nou calcul", "Ajuda",
+                    "Sortir") <> 0 THEN
+            IF zopt == 2 THEN TAJUDA(); END;
+            IF zopt == 3 THEN zgo := 0; END;
           END;
         END;
       END;
@@ -759,60 +747,807 @@ BEGIN
   RETURN zst;
 END;
 
-// Comparacio rapida dels dos estats desats (proces 1 -> 2):
-// dona els salts que es demanen sempre en un balanc.
-EXPORT TDELTA()
+// ====== GENERALITZATS (ve de ppl/GENER.txt) ======
+EXPORT TGKS:={0.1181193,0.265728,0.154790,0.030323,
+              0.0236744,0.0186984,0.0,0.042724,
+              0.155488E-4,0.623689E-4,0.65392,0.060167};
+
+EXPORT TGKR:={0.2026579,0.331511,0.027655,0.203488,
+              0.0313385,0.0503618,0.016901,0.041577,
+              0.48736E-4,0.0740336E-4,1.226,0.03754};
+
+// Factor acentric del fluid de referencia (n-octa) i R en J/(mol*K).
+EXPORT TGWR:=0.3978;
+EXPORT TGR:=8.314;
+
+// ---- dades del fluid, que es recorden entre calculs ----------------
+// Una declaracio per linia: EXPORT amb diverses inicialitzades a la mateixa
+// linia ha fallat en compilar.
+EXPORT TGTC:=300;      // temperatura critica [K]
+EXPORT TGPC:=5;        // pressio critica [MPa]
+EXPORT TGW:=0;         // factor acentric
+EXPORT TGCPA:=40;      // la a de cp* = a + b*T   [J/(mol*K)]
+EXPORT TGCPB:=0;       // la b, el pendent [J/(mol*K^2)]; 0 si cp* es constant
+EXPORT TGMM:=0;        // massa molar [g/mol]; 0 = no es donen valors per kg
+
+// ---- estats, que tambe es recorden ---------------------------------
+EXPORT TGT1:=345;
+EXPORT TGP1:=3;
+EXPORT TGT2:=315;
+EXPORT TGP2:=3;
+// Volum molar, per al diposit rigid. 0 = "no el se, fes servir la P": un
+// volum molar no val zero mai, aixi que el sentinella no pot xocar amb cap
+// dada bona. A PROCES REAL n'hi ha un de sol: si el recipient es rigid, el
+// volum es el MATEIX als dos estats, que es precisament el cas.
+EXPORT TGV1:=0;
+
+// Quina substancia s'ha triat al desplegable: 1 = (manual), i de 2 en
+// endavant, la fila TGSUB-1 de TGCRI. Les constants critiques ja eren a les
+// dades i no es feien servir; hi ha preguntes que anomenen la substancia i
+// NO donen Tc, Pc ni w -etile, 30/10/2019 i 31/10/2024- i llavors la unica
+// sortida era buscar-les fora de l'aparell.
+EXPORT TGSUB:=1;
+
+// ===================================================================
+// NUCLI
+// ===================================================================
+
+// Factor de compressibilitat d'un joc de constants a (Tr, Vr).
+//
+// Vr es el volum reduit de Lee-Kesler, Vr = Pc*v/(R*Tc), que NO es v/vc:
+// es adimensional per construccio i val Tr/Pr si el gas fos ideal.
+EXPORT TGZ(zk, ztr, zvr)
 BEGIN
-  LOCAL zy, za, zb;
-  // Es copien a locals ABANS d'indexar-les. Indexar directament una variable
-  // global que el compilador no te clar que sigui una llista es llegeix com
-  // una crida a funcio i no compila.
-  za := TS1; zb := TS2;
-  IF SIZE(za) < 9 OR SIZE(zb) < 9 THEN
-    MSGBOX("Calcula DOS estats amb TERMO() i torna a provar.");
-    RETURN 0;
+  LOCAL zb, zc, zd, zg, zex;
+  zg := zk(12);
+  zb := zk(1) - zk(2)/ztr - zk(3)/ztr^2 - zk(4)/ztr^3;
+  zc := zk(5) - zk(6)/ztr + zk(7)/ztr^3;
+  zd := zk(9) + zk(10)/ztr;
+  zex := EXP(-zg/zvr^2);
+  RETURN 1 + zb/zvr + zc/zvr^2 + zd/zvr^5
+         + zk(8)/(ztr^3*zvr^2)*(zk(11) + zg/zvr^2)*zex;
+END;
+
+// {(h-h*)/(R*Tc), (s-s*)/R} d'un joc de constants a (Tr, Vr).
+EXPORT TGDIS(zk, ztr, zvr, zz)
+BEGIN
+  LOCAL zg, zex, ze, zdh, zds;
+  zg := zk(12);
+  zex := EXP(-zg/zvr^2);
+  ze := zk(8)/(2*ztr^3*zg)*(zk(11) + 1 - (zk(11) + 1 + zg/zvr^2)*zex);
+  zdh := ztr*(zz - 1
+         - (zk(2) + 2*zk(3)/ztr + 3*zk(4)/ztr^2)/(ztr*zvr)
+         - (zk(6) - 3*zk(7)/ztr^2)/(2*ztr*zvr^2)
+         + zk(10)/(5*ztr*zvr^5)
+         + 3*ze);
+  zds := LN(zz)
+         - (zk(1) + zk(3)/ztr^2 + 2*zk(4)/ztr^3)/zvr
+         - (zk(5) - 2*zk(7)/ztr^3)/(2*zvr^2)
+         - zk(9)/(5*zvr^5)
+         + 2*ze;
+  RETURN {zdh, zds};
+END;
+
+// Arrel Vr MES GRAN de P(Tr,Vr) = Pr. Torna -1 si no en troba cap.
+//
+// Es fa amb barrit descendent i biseccio, no amb Newton. Motiu: per sota de
+// la critica la isoterma te TRES arrels -liquid, branca inestable, vapor- i
+// un Newton llancat des del gas ideal pot caure a qualsevol sense avisar.
+// Baixant des de Vr gran, la primera que es troba es la de vapor, que es la
+// bona: les tres arrels nomes apareixen per sota de la pressio de saturacio,
+// on el fluid ES vapor. Per sobre en queda una de sola, la de liquid, i el
+// mateix barrit la troba.
+EXPORT TGVR(zk, ztr, zpr)
+BEGIN
+  LOCAL zhi, zrt, zi, zv, zf, zvp;
+  LOCAL zfp, za, zb, zfa, zmd, zfm;
+  LOCAL zj;
+  zhi := 20*ztr/zpr + 10;
+  zrt := EXP(LN(0.02/zhi)/150);
+  zv := zhi;
+  zf := TGZ(zk, ztr, zv)*ztr/zv - zpr;
+  FOR zi FROM 1 TO 150 DO
+    zvp := zv;
+    zfp := zf;
+    zv := zv*zrt;
+    zf := TGZ(zk, ztr, zv)*ztr/zv - zpr;
+    IF zfp*zf <= 0 THEN
+      za := zv;
+      zfa := zf;
+      zb := zvp;
+      FOR zj FROM 1 TO 40 DO
+        zmd := (za + zb)/2;
+        zfm := TGZ(zk, ztr, zmd)*ztr/zmd - zpr;
+        IF zfa*zfm <= 0 THEN
+          zb := zmd;
+        ELSE
+          za := zmd;
+          zfa := zfm;
+        END;
+      END;
+      RETURN (za + zb)/2;
+    END;
   END;
+  RETURN -1;
+END;
+
+// Lectura completa de les tres cartes a (Tr, Pr), amb el factor acentric.
+//
+// Torna una llista d'11:
+//   {Z0, Z1, Z, dh0, dh1, dh, ds0, ds1, ds, Vr, ok}
+// amb dh = (h-h*)/(R*Tc) i ds = (s-s*)/R. ok val 1, o -1 si no hi ha arrel
+// (i llavors la resta son zeros). Comprova SEMPRE l'element 11.
+EXPORT TGPIT(ztr, zpr, zw)
+BEGIN
+  LOCAL zks, zkr, zv0, zvr, zz0, zzr;
+  LOCAL zd0, zdr, zz1, zh1, zs1;
+  zks := TGKS;
+  zkr := TGKR;
+  zv0 := TGVR(zks, ztr, zpr);
+  zvr := TGVR(zkr, ztr, zpr);
+  IF zv0 < 0 OR zvr < 0 THEN
+    RETURN {0,0,0,0,0,0,0,0,0,0,-1};
+  END;
+  zz0 := TGZ(zks, ztr, zv0);
+  zzr := TGZ(zkr, ztr, zvr);
+  // Les crides no es poden indexar directament: primer a una local.
+  zd0 := TGDIS(zks, ztr, zv0, zz0);
+  zdr := TGDIS(zkr, ztr, zvr, zzr);
+  zz1 := (zzr - zz0)/TGWR;
+  zh1 := (zdr(1) - zd0(1))/TGWR;
+  zs1 := (zdr(2) - zd0(2))/TGWR;
+  RETURN {zz0, zz1, zz0 + zw*zz1,
+          zd0(1), zh1, zd0(1) + zw*zh1,
+          zd0(2), zs1, zd0(2) + zw*zs1,
+          zv0, 1};
+END;
+
+// El mateix des de (Tr, Vr), sense iterar: amb el volum donat ja esta tot
+// fixat. Es el cas del diposit rigid, que als examens surt tant com l'altre.
+//
+// El fluid de referencia s'avalua al MATEIX Vr, no a la mateixa Pr: aixi
+// estan construides les taules de Lee-Kesler.
+//
+// Amb (T, v) la pressio NO te per que sortir positiva: dins la campana la
+// isoterma de Lee-Kesler baixa per sota de zero i llavors Z <= 0. Aixo no es
+// cap estat, es la branca mecanicament inestable de l'equacio, i la
+// discrepancia d'entropia porta un LN(Z) que no admet aquell numero. Es
+// rebutja abans de cridar TGDIS: que LN d'un negatiu doni error, un complex o
+// una altra cosa no s'ha mesurat en aquesta calculadora, i un complex que
+// segueix endavant seria un resultat resolt i equivocat.
+//
+// Per (Tr, Pr) el cas no existeix: alli Z = Pr*Vr/Tr es positiu sempre.
+EXPORT TGPITV(ztr, zvr, zw)
+BEGIN
+  LOCAL zks, zkr, zz0, zzr, zd0, zdr;
+  LOCAL zz1, zh1, zs1;
+  zks := TGKS;
+  zkr := TGKR;
+  zz0 := TGZ(zks, ztr, zvr);
+  zzr := TGZ(zkr, ztr, zvr);
+  IF zz0 <= 0 OR zzr <= 0 THEN
+    RETURN {0,0,0,0,0,0,0,0,0,0,-1};
+  END;
+  zd0 := TGDIS(zks, ztr, zvr, zz0);
+  zdr := TGDIS(zkr, ztr, zvr, zzr);
+  zz1 := (zzr - zz0)/TGWR;
+  zh1 := (zdr(1) - zd0(1))/TGWR;
+  zs1 := (zdr(2) - zd0(2))/TGWR;
+  RETURN {zz0, zz1, zz0 + zw*zz1,
+          zd0(1), zh1, zd0(1) + zw*zh1,
+          zd0(2), zs1, zd0(2) + zw*zs1,
+          zvr, 1};
+END;
+
+// Carrega Tc, Pc, w i M de la substancia triada. Amb TGSUB=1 no toca res:
+// les constants son les que hi ha al formulari de constants.
+//
+// El cp* NO surt d'aqui. Les taules donen propietats del fluid real, no la
+// capacitat calorifica de gas ideal, i l'enunciat sempre la dona quan cal.
+EXPORT TGCARR()
+BEGIN
+  LOCAL zm, zi;
+  IF TGSUB <= 1 THEN RETURN 0; END;
+  zm := TGCRI;
+  zi := TGSUB - 1;
+  TGTC := zm(zi, 1);
+  TGPC := zm(zi, 2);
+  TGW := zm(zi, 3);
+  TGMM := zm(zi, 4);
+  RETURN 1;
+END;
+
+// ---- capa amb unitats ----------------------------------------------
+// Estat real a (T[K], P[MPa]) amb les constants actives. Torna
+//   {Z, v[m3/mol], dh[J/mol], ds[J/(mol*K)], Tr, Pr, ok}
+EXPORT TGEST(zt, zp)
+BEGIN
+  LOCAL zg, ztr, zpr;
+  ztr := zt/TGTC;
+  zpr := zp/TGPC;
+  zg := TGPIT(ztr, zpr, TGW);
+  IF zg(11) < 0 THEN RETURN {0,0,0,0,ztr,zpr,-1}; END;
+  RETURN {zg(3), zg(3)*TGR*zt/(zp*1000000),
+          zg(6)*TGR*TGTC, zg(9)*TGR, ztr, zpr, 1};
+END;
+
+// El mateix, pero donant el volum molar en comptes de la pressio, que es el
+// cas del diposit rigid. Torna la mateixa llista de 7, amb la P calculada a
+// l'element 8:
+//   {Z, v[m3/mol], dh[J/mol], ds[J/(mol*K)], Tr, Pr, ok, P[MPa]}
+// Aqui NO cal iterar: amb (T, v) el Vr ja esta fixat i la pressio en surt.
+EXPORT TGESTV(zt, zv)
+BEGIN
+  LOCAL zg, ztr, zvr, zp;
+  ztr := zt/TGTC;
+  zvr := TGPC*1000000*zv/(TGR*TGTC);
+  zg := TGPITV(ztr, zvr, TGW);
+  IF zg(11) < 0 THEN RETURN {0,0,0,0,ztr,0,-1,0}; END;
+  zp := zg(3)*TGR*zt/zv/1000000;
+  RETURN {zg(3), zv, zg(6)*TGR*TGTC, zg(9)*TGR, ztr, zp/TGPC, 1, zp};
+END;
+
+// Un estat des de (T, P) o des de (T, v), segons quin li donis. v = 0 vol dir
+// "no el se": un volum molar val zero mai, aixi que el sentinella no pot
+// xocar amb cap dada bona. Torna sempre la llista de 8 de TGESTV.
+EXPORT TGANY(zt, zp, zv)
+BEGIN
+  LOCAL ze;
+  IF zv > 0 THEN RETURN TGESTV(zt, zv); END;
+  ze := TGEST(zt, zp);
+  RETURN {ze(1), ze(2), ze(3), ze(4), ze(5), ze(6), ze(7), zp};
+END;
+
+// cp* integrat: entalpia i entropia de gas ideal entre T1 i T2.
+// cp* = TGCPA + TGCPB*T, aixi que
+//   int cp* dT   = a*(T2-T1) + b/2*(T2^2-T1^2)
+//   int cp*/T dT = a*ln(T2/T1) + b*(T2-T1)
+EXPORT TGIDH(zt1, zt2)
+BEGIN
+  RETURN TGCPA*(zt2 - zt1) + TGCPB/2*(zt2^2 - zt1^2);
+END;
+
+EXPORT TGIDS(zt1, zt2)
+BEGIN
+  RETURN TGCPA*LN(zt2/zt1) + TGCPB*(zt2 - zt1);
+END;
+
+// ===================================================================
+// PANTALLES
+// ===================================================================
+
+// Formulari de constants del fluid. Tres files, que es el nombre que ja
+// funciona a una G2 en aquesta mateixa app (el de TERMO).
+// Els formularis de constants. Es demanen DESPRES del problema i nomes els
+// camps que de veritat falten:
+//
+//   substancia del desplegable  ->  Tc, Pc, w i M surten de les taules, i
+//                                   nomes cal el cp*, que cap taula porta
+//                                   perque es del gas ideal
+//   (manual)                    ->  cal tot
+//
+// Ensenyar un camp que despres s'ignora es la pitjor opcio: qui l'edita es
+// pensa que serveix i el resultat surt resolt i equivocat. Amb una
+// substancia triada, TGCARR sobreescriuria Tc, Pc, w i M, aixi que no es
+// demanen.
+//
+// Van en dialegs a part perque INPUT es modal i no s'hi poden posar mes de
+// tres files sense sortir del que se sap que funciona.
+EXPORT TGDCON()
+BEGIN
+  RETURN INPUT(
+    { {TGTC, [0], {24, 26, 0}}, {TGPC, [0], {70, 26, 0}},
+      {TGW,  [0], {24, 26, 1}}, {TGMM, [0], {70, 26, 1}} },
+    "Constants del fluid",
+    {"Tc[K]", "Pc[MPa]", "w", "M"},
+    {"temperatura critica",
+     "pressio critica",
+     "factor acentric (0 si no el donen)",
+     "g/mol; 0 = nomes valors molars"});
+END;
+
+// El cp* del gas ideal: la a i la b de cp* = a + b*T. Nomes el fa servir
+// PROCES REAL, i no surt mai de les taules, que donen el fluid real.
+EXPORT TGDCP()
+BEGIN
+  RETURN INPUT(
+    { {TGCPA, [0], {24, 26, 0}}, {TGCPB, [0], {70, 26, 0}} },
+    "cp* del gas ideal",
+    {"cp* =", "+ T*"},
+    {"terme constant, en J/(mol K)",
+     "pendent; 0 si cp* es constant"});
+END;
+
+// Capcalera comuna: diu amb quines constants s'ha calculat. Que estiguin
+// sempre a la vista es deliberat: una Tc vella dona un resultat resolt i
+// equivocat, que es la pitjor manera de fallar perque res no avisa.
+EXPORT TGCAP(zy)
+BEGIN
+  LOCAL zs, zn;
+  zs := "Tc=" + TSIG(TGTC,5) + "K  Pc=" + TSIG(TGPC,5) + "MPa  w="
+        + TSIG(TGW,4);
+  // Si les constants venen d'una substancia, es diu quina: si no, no hi ha
+  // manera de saber si el desplegable esta on et penses.
+  IF TGSUB > 1 THEN
+    zn := TGNOMS;
+    zs := zn(TGSUB) + " -- " + zs;
+  END;
+  TEXTOUT_P(zs, 4, zy, 2, RGB(90,90,90), 316);
+  RETURN 1;
+END;
+
+// ---- pantalla 1: taules generalitzades -----------------------------
+// Un estat: el que es llegiria a les tres cartes, i el volum que en surt.
+EXPORT TGTAB()
+BEGIN
+  LOCAL zok, zg, zy, zk, zgo, ztr;
+  LOCAL zpr, zv, zop, zp;
+  zgo := 1;
+  WHILE zgo == 1 DO
+    // Primer el problema. Amb una substancia del desplegable no falta res
+    // mes i el calcul surt amb UN sol dialeg; amb (manual) se'n demana un
+    // segon amb les constants. Cancelar-lo torna al primer, que es com
+    // s'esmena una dada sense sortir de la pantalla.
+    zok := INPUT(
+      { {TGSUB, TGNOMS, {18, 78, 0}},
+        {TGT1, [0], {24, 26, 1}}, {TGP1, [0], {70, 26, 1}},
+        {TGV1, [0], {30, 26, 2}} },
+      "GAS REAL - un estat",
+      {"Sust", "T [K]", "P[MPa]", "v m3/mol"},
+      {"si es a taules, les constants surten soles",
+       "temperatura, en KELVIN",
+       "s'ignora si dones un volum",
+       "si el diposit es RIGID; 0 = usa la P"});
+    IF zok == 0 THEN
+      zgo := 0;
+    ELSE
+      TGCARR();
+      IF TGSUB <= 1 THEN zok := TGDCON(); END;
+    END;
+    // zok=0 aqui vol dir que s'ha cancelat un dels dos dialegs. Si era el
+    // primer, zgo ja val 0 i el bucle s'acaba; si era el segon, el bucle
+    // torna a obrir el primer, que es com s'esmena una constant sense sortir.
+    IF zok <> 0 THEN
+      // El diposit rigid dona el volum, no la pressio. Amb v>0 no cal
+      // iterar: (Tr, Vr) ja ho fixa tot, i la P surt de la mateixa Z.
+      //
+      // Es crida UNA sola vegada i despres es dedueix la resta. Passar per
+      // TGANY seria mes curt d'escriure i faria la cerca d'arrel dues
+      // vegades, que es la part cara d'aquesta pantalla.
+      ztr := TGT1/TGTC;
+      IF TGV1 > 0 THEN
+        zg := TGPITV(ztr, TGPC*1000000*TGV1/(TGR*TGTC), TGW);
+      ELSE
+        zg := TGPIT(ztr, TGP1/TGPC, TGW);
+      END;
+      RECT();
+      TEXTOUT_P("GAS REAL - UN ESTAT", 4, 2, 3, RGB(0,0,180), 316);
+      TGCAP(24);
+      IF zg(11) < 0 THEN
+        TEXTOUT_P("Sense solucio a Tr=" + TSIG(ztr,4), 4, 60, 3,
+                  RGB(200,0,0), 316);
+        IF TGV1 > 0 THEN
+          TEXTOUT_P("Amb aquest volum el punt cau dins la campana:",
+                    4, 90, 2, RGB(0,0,0), 316);
+          TEXTOUT_P("alli l'equacio dona pressio negativa i no hi ha estat.",
+                    4, 108, 2, RGB(0,0,0), 316);
+        ELSE
+          TEXTOUT_P("Revisa Tc, Pc i les unitats.", 4, 90, 2,
+                    RGB(0,0,0), 316);
+        END;
+      ELSE
+        IF TGV1 > 0 THEN
+          zv := TGV1;
+          zp := zg(3)*TGR*TGT1/zv/1000000;
+        ELSE
+          zp := TGP1;
+          zv := zg(3)*TGR*TGT1/(zp*1000000);
+        END;
+        zpr := zp/TGPC;
+        TEXTOUT_P("Tr = " + TDEC(ztr,4) + "     Pr = " + TDEC(zpr,4),
+                  4, 44, 3, RGB(0,0,0), 316);
+        zy := 70;
+        TEXTOUT_P("Z0 = " + TDEC(zg(1),4) + "   Z1 = " + TDEC(zg(2),4),
+                  4, zy, 2, RGB(0,0,0), 316); zy := zy + 19;
+        TEXTOUT_P("Z  = " + TDEC(zg(3),4), 4, zy, 3, RGB(0,120,0), 316);
+        zy := zy + 25;
+        TEXTOUT_P("(h-h*)/RTc:  0=" + TDEC(zg(4),4) + "  1=" + TDEC(zg(5),4),
+                  4, zy, 2, RGB(0,0,0), 316); zy := zy + 19;
+        TEXTOUT_P("             = " + TDEC(zg(6),4), 4, zy, 2,
+                  RGB(0,0,180), 316); zy := zy + 22;
+        TEXTOUT_P("(s-s*)/R:    0=" + TDEC(zg(7),4) + "  1=" + TDEC(zg(8),4),
+                  4, zy, 2, RGB(0,0,0), 316); zy := zy + 19;
+        TEXTOUT_P("             = " + TDEC(zg(9),4), 4, zy, 2,
+                  RGB(0,0,180), 316); zy := zy + 22;
+        // L'ultima fila (zy=196) porta la magnitud que NO s'ha teclejat, que
+        // es la que es venia a buscar. Es una fila i prou: a font 3 la
+        // seguent cauria a 216, fora de l'area d'app -que acaba a 212- i a
+        // sobre del peu. No donaria cap error: es pintaria i ja.
+        IF TGV1 > 0 THEN
+          TEXTOUT_P("P = " + TSIG(zp,6) + " MPa", 4, zy, 3,
+                    RGB(0,120,0), 316);
+        ELSE
+          // dues dades a la mateixa fila: cadascuna amb la seva amplada, o
+          // la primera es pintaria a sobre de la segona sense dir res
+          TEXTOUT_P("v = " + TSIG(zv,5) + " m3/mol", 4, zy, 2,
+                    RGB(0,0,0), 160);
+          IF TGMM > 0 THEN
+            TEXTOUT_P("= " + TSIG(zv*1000/TGMM,5) + " m3/kg",
+                      170, zy, 2, RGB(0,0,0), 146);
+          END;
+        END;
+      END;
+      TEXTOUT_P("tecla=tornar  View=menu  Help=ajuda  Esc=surt",
+                4, 224, 2, RGB(0,0,0), 316);
+      zk := TPAUSE();
+      IF zk == TKHELP THEN TGAJUDA(); END;
+      IF zk == TKESC THEN zgo := 0; END;
+      IF zk == TKVIEW THEN
+        zop := 1;
+        IF CHOOSE(zop, "GAS REAL", "Nou calcul", "Ajuda",
+                  "Sortir") <> 0 THEN
+          IF zop == 2 THEN TGAJUDA(); END;
+          IF zop == 3 THEN zgo := 0; END;
+        END;
+      END;
+    END;
+  END;
+  RETURN 1;
+END;
+
+// ---- pantalla 2: funcions de discrepancia --------------------------
+// El proces 1 -> 2, que es el que demana el balanc. La recepta de l'apunt:
+// s'hi va al gas ideal, es fa el cami alli, i es torna.
+//
+//   dh = int cp* dT              + (dh2 - dh1)*R*Tc
+//   ds = int cp*/T dT - R ln(P2/P1) + (ds2 - ds1)*R
+//   du = dh - R*(Z2*T2 - Z1*T1)
+//
+// Cada estat es pot donar per pressio o per volum molar: al diposit rigid el
+// que es coneix es el volum, i la P es justament el que es pregunta. v=0 vol
+// dir "no el se". El ln(P2/P1) de l'entropia fa servir la P CALCULADA, que es
+// la de veritat; posar-hi la del formulari amb v donat seria fer servir un
+// numero que no s'ha fet servir per res mes.
+EXPORT TGPROC()
+BEGIN
+  LOCAL zok, za, zb, zy, zk, zgo;
+  LOCAL zdh, zds, zdu, zop, zp1, zp2;
+  zgo := 1;
+  WHILE zgo == 1 DO
+    zok := INPUT(
+      { {TGSUB, TGNOMS, {18, 54, 0}}, {TGV1, [0], {78, 21, 0}},
+        {TGT1, [0], {24, 26, 1}}, {TGP1, [0], {70, 26, 1}},
+        {TGT2, [0], {24, 26, 2}}, {TGP2, [0], {70, 26, 2}} },
+      "PROCES REAL - dos estats",
+      {"Sust", "v", "T1 [K]", "P1[MPa]", "T2 [K]", "P2[MPa]"},
+      {"si es a taules, les constants surten soles",
+       "m3/mol si el diposit es RIGID; 0 = usa les P",
+       "temperatura de l'estat 1, en KELVIN",
+       "s'ignora si dones un volum",
+       "temperatura de l'estat 2, en KELVIN",
+       "s'ignora si dones un volum"});
+    IF zok == 0 THEN
+      zgo := 0;
+    ELSE
+      TGCARR();
+      IF TGSUB <= 1 THEN zok := TGDCON(); END;
+      // El cp* sempre: aquesta pantalla el necessita i cap taula el porta.
+      IF zok <> 0 THEN zok := TGDCP(); END;
+    END;
+    // zok=0 aqui vol dir que s'ha cancelat un dels dos dialegs. Si era el
+    // primer, zgo ja val 0 i el bucle s'acaba; si era el segon, el bucle
+    // torna a obrir el primer, que es com s'esmena una constant sense sortir.
+    IF zok <> 0 THEN
+      // Un sol volum: si el recipient es rigid, el volum molar es el MATEIX
+      // als dos estats. Que fossin diferents i tots dos coneguts no passa.
+      za := TGANY(TGT1, TGP1, TGV1);
+      zb := TGANY(TGT2, TGP2, TGV1);
+      RECT();
+      TEXTOUT_P("PROCES REAL - 1 A 2", 4, 2, 3, RGB(0,0,180), 316);
+      TGCAP(24);
+      IF za(7) < 0 OR zb(7) < 0 THEN
+        TEXTOUT_P("Sense solucio en un dels dos estats.", 4, 60, 3,
+                  RGB(200,0,0), 316);
+        TEXTOUT_P("Amb v donat, el punt pot caure dins la campana;",
+                  4, 90, 2, RGB(0,0,0), 316);
+        TEXTOUT_P("si no, revisa Tc, Pc i les unitats.", 4, 108, 2,
+                  RGB(0,0,0), 316);
+      ELSE
+        zp1 := za(8);
+        zp2 := zb(8);
+        zdh := TGIDH(TGT1, TGT2) + zb(3) - za(3);
+        zds := TGIDS(TGT1, TGT2) - TGR*LN(zp2/zp1) + zb(4) - za(4);
+        zdu := zdh - TGR*(zb(1)*TGT2 - za(1)*TGT1);
+        zy := 44;
+        TEXTOUT_P("1: Tr=" + TDEC(za(5),3) + " Pr=" + TDEC(za(6),3)
+                  + "  Z=" + TDEC(za(1),4), 4, zy, 2, RGB(0,0,0), 316);
+        zy := zy + 18;
+        TEXTOUT_P("2: Tr=" + TDEC(zb(5),3) + " Pr=" + TDEC(zb(6),3)
+                  + "  Z=" + TDEC(zb(1),4), 4, zy, 2, RGB(0,0,0), 316);
+        zy := zy + 18;
+        // Si algun estat s'ha donat pel volum, la pressio era la incognita:
+        // es diu, que es el numero que es venia a buscar.
+        // El respir abans dels tres resultats nomes es posa quan NO hi ha
+        // linia de pressions. Amb ella, la fila de mes avall -isoterm o
+        // isobar- ja arriba a y=203 i el peu es a 224: sis pixels mes i es
+        // tocarien, sense que res avisi.
+        IF TGV1 > 0 THEN
+          TEXTOUT_P("P1 = " + TSIG(zp1,6) + "   P2 = " + TSIG(zp2,6)
+                    + " MPa", 4, zy, 2, RGB(0,120,0), 316);
+          zy := zy + 18;
+        ELSE
+          zy := zy + 6;
+        END;
+        TEXTOUT_P("dh = " + TDEC(zdh,1) + " J/mol", 4, zy, 3,
+                  RGB(0,0,0), 316); zy := zy + 23;
+        TEXTOUT_P("ds = " + TDEC(zds,4) + " J/molK", 4, zy, 3,
+                  RGB(0,0,0), 316); zy := zy + 23;
+        TEXTOUT_P("du = " + TDEC(zdu,1) + " J/mol", 4, zy, 3,
+                  RGB(0,0,0), 316); zy := zy + 23;
+        IF TGMM > 0 THEN
+          TEXTOUT_P("per kg:  dh=" + TDEC(zdh/TGMM,3) + "  du="
+                    + TDEC(zdu/TGMM,3) + " kJ/kg", 4, zy, 2,
+                    RGB(0,0,0), 316);
+          zy := zy + 18;
+        END;
+        // Nomes es diuen si la condicio es certa de veritat: modelar el
+        // proces es feina de qui fa l'examen, no de l'app.
+        IF TGT1 == TGT2 THEN
+          TEXTOUT_P("isoterm: q=T*ds= " + TDEC(TGT1*zds,1) + " J/mol",
+                    4, zy, 2, RGB(0,120,0), 316);
+          zy := zy + 18;
+        END;
+        // La P que decideix si es isobar es la CALCULADA, no la del
+        // formulari: amb v donat, la del formulari no s'ha fet servir per res.
+        IF zp1 == zp2 THEN
+          TEXTOUT_P("isobar: w=-P*dv= "
+                    + TDEC(-zp1*1000000*(zb(2) - za(2)),1) + " J/mol",
+                    4, zy, 2, RGB(0,120,0), 316);
+        END;
+      END;
+      TEXTOUT_P("tecla=tornar  View=menu  Help=ajuda  Esc=surt",
+                4, 224, 2, RGB(0,0,0), 316);
+      zk := TPAUSE();
+      IF zk == TKHELP THEN TGAJUDA(); END;
+      IF zk == TKESC THEN zgo := 0; END;
+      IF zk == TKVIEW THEN
+        zop := 1;
+        IF CHOOSE(zop, "PROCES REAL", "Nou calcul", "Ajuda",
+                  "Sortir") <> 0 THEN
+          IF zop == 2 THEN TGAJUDA(); END;
+          IF zop == 3 THEN zgo := 0; END;
+        END;
+      END;
+    END;
+  END;
+  RETURN 1;
+END;
+
+// ---- ajuda ----------------------------------------------------------
+// Onze linies, que es el que hi cap amb interlineat de 17 px des de y=26.
+EXPORT TGAJUT:={
+  "Es el que l'examen anomena metodes generalitzats,",
+  "correlacions de Pitzer o funcions de discrepancia.",
+  "Primer es demana el problema. Si tries substancia",
+  "al desplegable, Tc, Pc, w i M surten de les taules",
+  "i no cal res mes; amb (manual) ve un segon",
+  "formulari amb les constants.",
+  "cp*: la a i la b de cp* = a + b*T. Si es constant,",
+  "b=0. Cap taula el porta: es del gas ideal.",
+  "UNITATS: T i Tc en K, P i Pc en MPa, M en g/mol.",
+  "SIGNE: es dona h-h*, REAL menys ideal, negatiu.",
+  "Tr i Pr donats: (manual) amb Tc=1 i Pc=1."
+};
+
+EXPORT TGAJUDA()
+BEGIN
+  LOCAL zy, zi;
   RECT();
-  TEXTOUT_P("SALT DEL ESTAT 1 AL 2", 4, 2, 3, RGB(0,0,180));
-  TEXTOUT_P("1:  T=" + TDEC(za(1),2) + "   P=" + TSIG(za(2),5) +
-            "   h=" + TDEC(za(5),2), 4, 26, 2);
-  TEXTOUT_P("2:  T=" + TDEC(zb(1),2) + "   P=" + TSIG(zb(2),5) +
-            "   h=" + TDEC(zb(5),2), 4, 44, 2);
-  zy := 68;
-  TEXTOUT_P("dh = " + TDEC(zb(5)-za(5),2) + " kJ/kg", 4, zy, 3); zy := zy + 25;
-  TEXTOUT_P("du = " + TDEC(zb(4)-za(4),2) + " kJ/kg", 4, zy, 3); zy := zy + 25;
-  TEXTOUT_P("ds = " + TDEC(zb(6)-za(6),4) + " kJ/kgK", 4, zy, 3); zy := zy + 25;
-  TEXTOUT_P("dv = " + TSIG(zb(3)-za(3),5) + " m3/kg", 4, zy, 3); zy := zy + 25;
-  TEXTOUT_P("dT = " + TDEC(zb(1)-za(1),2), 4, zy, 3); zy := zy + 25;
-  TEXTOUT_P("dP = " + TSIG(zb(2)-za(2),5) + " MPa", 4, zy, 3);
-  TEXTOUT_P("Prem una tecla per tornar", 4, 220, 2);
+  TEXTOUT_P("GAS REAL - ajuda", 4, 2, 3, RGB(0,0,180), 316);
+  zy := 26;
+  FOR zi FROM 1 TO SIZE(TGAJUT) DO
+    TEXTOUT_P(TGAJUT(zi), 4, zy, 2, RGB(0,0,0), 316);
+    zy := zy + 17;
+  END;
+  TEXTOUT_P("Prem una tecla per tornar", 4, 218, 2, RGB(0,0,0), 316);
   TPAUSE();
   RETURN 1;
 END;
 
-// ====== GANXOS DE LA APP (ve de ppl/APP_TAULES.hpprgm) ======
+// ========= MENU (ve de ppl/MENU.txt) =========
+EXPORT TMTIT:={"TAULES", "GAS REAL", "PROCES REAL"};
+EXPORT TMSUB:={"propietats d'una substancia",
+               "un estat: Z, v i discrepancies",
+               "dos estats: dh, ds i du"};
+
+// Estat del debounce del tacte. Comenca a 1 -"hi ha un dit"- a proposit:
+// el toc que tanca un dialeg arriba una segona vegada a la pantalla de sota,
+// i sense aixo obriria tot sol el boto que hi hagi a sota del boto OK.
+EXPORT TMDOWN:=1;
+
+// ---- geometria ------------------------------------------------------
+// Boto zi (1..3): {x1, y1, x2, y2}. Tres de 52 px separats 8, des de y=32:
+// l'ultim acaba a 204 i el peu a 216, dins de l'area d'app, que va fins a
+// 212 abans de la fila de tecles de pantalla.
+EXPORT TMBTN(zi)
+BEGIN
+  LOCAL zy;
+  zy := 32 + (zi - 1)*60;
+  RETURN {6, zy, 314, zy + 52};
+END;
+
+// Quin boto cau sota (zx, zy). 0 si cap, i tambe si no hi ha tacte, que
+// arriba com a (-1, -1).
+EXPORT TMHIT(zx, zy)
+BEGIN
+  LOCAL zi, zr;
+  IF zx < 0 OR zy < 0 THEN RETURN 0; END;
+  FOR zi FROM 1 TO SIZE(TMTIT) DO
+    zr := TMBTN(zi);
+    IF zx >= zr(1) AND zx <= zr(3) AND zy >= zr(2) AND zy <= zr(4) THEN
+      RETURN zi;
+    END;
+  END;
+  RETURN 0;
+END;
+
+// ---- tacte ----------------------------------------------------------
+// {x, y} de l'ultim contacte, o {-1,-1} si no n'hi ha.
+//
+// Tot va dins d'un IFERR i cada llista es mira amb SIZE abans d'indexar-la.
+// No es per elegancia: MOUSE torna llistes dins de llistes i si algun dia
+// tornes una altra cosa, o no hi es, el menu ha de seguir obrint-se amb les
+// tecles en comptes de quedar-se penjat.
+EXPORT TMTOUCH()
+BEGIN
+  LOCAL zm, zp, zx, zy;
+  zx := -1;
+  zy := -1;
+  IFERR
+    zm := MOUSE;
+    IF SIZE(zm) >= 1 THEN
+      zp := zm(1);
+      IF SIZE(zp) >= 2 THEN
+        zx := zp(1);
+        zy := zp(2);
+      END;
+    END;
+  THEN
+    zx := -1;
+    zy := -1;
+  END;
+  RETURN {zx, zy};
+END;
+
+// Un toc = una accio. Torna el boto nomes al PRIMER contacte d'un toc nou;
+// mentre el dit segueix a sobre torna 0, perque la pantalla es llegeix
+// desenes de vegades per segon i si no, un toc obriria la pantalla, tornaria,
+// i la tornaria a obrir.
+EXPORT TMTAP()
+BEGIN
+  LOCAL zt, zb;
+  zt := TMTOUCH();
+  IF zt(1) < 0 THEN
+    TMDOWN := 0;
+    RETURN 0;
+  END;
+  IF TMDOWN == 1 THEN RETURN 0; END;
+  TMDOWN := 1;
+  zb := TMHIT(zt(1), zt(2));
+  RETURN zb;
+END;
+
+// ---- dibuix ---------------------------------------------------------
+EXPORT TMDRAW()
+BEGIN
+  LOCAL zi, zr, zt;
+  RECT();
+  TEXTOUT_P("TERMODINAMICA", 6, 4, 3, RGB(0,0,140), 308);
+  FOR zi FROM 1 TO SIZE(TMTIT) DO
+    zr := TMBTN(zi);
+    RECT_P(zr(1), zr(2), zr(3), zr(4), RGB(0,0,140), RGB(228,236,252));
+    zt := TMTIT;
+    TEXTOUT_P(STRING(zi) + ".  " + zt(zi), zr(1) + 12, zr(2) + 7, 3,
+              RGB(0,0,140), 284);
+    zt := TMSUB;
+    TEXTOUT_P(zt(zi), zr(1) + 12, zr(2) + 31, 2, RGB(70,70,70), 284);
+  END;
+  TEXTOUT_P("toca el boto o prem 1/2/3    Help=ajuda   Esc=surt",
+            6, 216, 2, RGB(70,70,70), 308);
+  RETURN 1;
+END;
+
+// ---- bucle ----------------------------------------------------------
+// Codis de tecla: son POSICIONS al teclat, no ASCII. 42, 43 i 44 son l'1, el
+// 2 i el 3 de la fila de baix. Els d'Esc i Help venen de TERMO, que ja els
+// te mesurats. Una tecla desconeguda no fa res, que es el que ha de fer.
+EXPORT TMK1:=42;
+EXPORT TMK2:=43;
+EXPORT TMK3:=44;
+
+EXPORT TMENU()
+BEGIN
+  LOCAL zgo, zk, zb;
+  zgo := 1;
+  // Purga: el toc que ha obert l'app encara pot estar a la pantalla.
+  TMDOWN := 1;
+  WHILE zgo == 1 DO
+    TMDRAW();
+    zb := 0;
+    WHILE zb == 0 AND zgo == 1 DO
+      zk := GETKEY;
+      IF zk == TMK1 THEN zb := 1; END;
+      IF zk == TMK2 THEN zb := 2; END;
+      IF zk == TMK3 THEN zb := 3; END;
+      IF zk == TKESC THEN zgo := 0; END;
+      IF zk == TKHELP THEN zb := 4; END;
+      IF zb == 0 THEN zb := TMTAP(); END;
+    END;
+    IF zb == 1 THEN TERMO(); END;
+    IF zb == 2 THEN TGTAB(); END;
+    IF zb == 3 THEN TGPROC(); END;
+    IF zb == 4 THEN TMAJUDA(); END;
+    // Purga en tornar de QUALSEVOL pantalla, en un sol lloc, perque cap no
+    // se'n pugui oblidar.
+    TMDOWN := 1;
+  END;
+  RETURN 1;
+END;
+
+// ---- ajuda ----------------------------------------------------------
+EXPORT TMAJUT:={
+  "1  TAULES",
+  "   Les 14 substancies del PDF de taules: dones",
+  "   dues magnituds i dona l'estat sencer.",
+  "2 i 3  GAS REAL: quan no hi ha taula i l'enunciat",
+  "   dona Tc, Pc i w. Es el que l'examen anomena",
+  "   metodes generalitzats o correlacions de Pitzer.",
+  "2  UN estat: Z, el volum i les discrepancies.",
+  "3  DOS estats: dh, ds i du, que es el que demana",
+  "   el balanc. Les constants es recorden.",
+  "Cada boto respon al dit i a la seva tecla.",
+  "Dins de cada pantalla: Help=ajuda, Esc=torna."
+};
+
+EXPORT TMAJUDA()
+BEGIN
+  LOCAL zy, zi, zt;
+  RECT();
+  TEXTOUT_P("TERMODINAMICA - ajuda", 4, 2, 3, RGB(0,0,180), 316);
+  zy := 26;
+  zt := TMAJUT;
+  FOR zi FROM 1 TO SIZE(zt) DO
+    TEXTOUT_P(zt(zi), 4, zy, 2, RGB(0,0,0), 316);
+    zy := zy + 17;
+  END;
+  TEXTOUT_P("Prem una tecla per tornar", 4, 218, 2, RGB(0,0,0), 316);
+  TPAUSE();
+  RETURN 1;
+END;
+
+// ====== GANXOS DE LA APP (ve de ppl/APP_TAULES.txt) ======
 EXPORT START()
 BEGIN
-  TERMO();
+  TMENU();
 END;
 
 // La tecla [Num] tambe hi entra: es la mes gran i facil de trobar.
 EXPORT Num()
 BEGIN
-  TERMO();
+  TMENU();
 END;
 
 // [Shift][Apps] mostra aquesta nota. Info() nomes admet PRINT.
 EXPORT Info()
 BEGIN
   LOCAL zi;
-  // Recorre la MATEIXA llista que dibuixa [Help], per no tenir dos textos
-  // d'ajuda que se separin amb el temps. Info() nomes admet PRINT.
+  // Recorre la MATEIXA llista que dibuixa el [Help] del menu, per no tenir
+  // dos textos d'ajuda que se separin amb el temps. Info() nomes admet PRINT.
   PRINT();
-  PRINT("TAULES - propietats termodinamiques");
+  PRINT("TAULES - termodinamica");
   PRINT("");
-  FOR zi FROM 1 TO SIZE(TAJUT) DO
-    PRINT(TAJUT(zi));
+  FOR zi FROM 1 TO SIZE(TMAJUT) DO
+    PRINT(TMAJUT(zi));
   END;
 END;
 
@@ -824,12 +1559,21 @@ BEGIN
   TD2 := 6;
   TV1 := 0;
   TV2 := 0;
-  TS1 := {};
-  TS2 := {};
+  // Les constants dels generalitzats tambe: una Tc vella d'un altre problema
+  // dona un resultat resolt i equivocat, que no avisa de res.
+  TGTC := 300;
+  TGPC := 5;
+  TGW := 0;
+  TGCPA := 40;
+  TGCPB := 0;
+  TGMM := 0;
+  TGSUB := 1;
+  TGV1 := 0;
+  TMDOWN := 1;
   TLOAD(TCUR);
 END;
 
-// No hi ha blocs VIEW a proposit. START() engega TERMO(), que es queda amb
+// No hi ha blocs VIEW a proposit. START() engega TMENU(), que es queda amb
 // el teclat mentre dura, aixi que les tecles de vista no arriben mai a
-// l'app: es TERMO qui les llegeix a la pantalla de resultats (qualsevol
+// l'app com a ganxos: cada pantalla les llegeix ella mateixa (qualsevol
 // tecla torna al formulari, [View] obre el menu, [Help] l'ajuda, [Esc] surt).

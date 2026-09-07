@@ -6,8 +6,8 @@ mas facilmente se rompe al pasar el motor a PPL es la ARITMETICA DE INDICES:
 las matrices son 1-based, las isobaras van una detras de otra en una sola
 matriz y cada una se parte en rama liquida y rama vapor con un contador.
 
-Este arnes lee los .hpprgm generados, reimplementa el acceso EXACTAMENTE como
-lo hace TERMO.hpprgm (mismos indices, mismo 1-based) y compara el resultado
+Este arnes lee los fuentes PPL generados, reimplementa el acceso EXACTAMENTE
+como lo hace TERMO.txt (mismos indices, mismo 1-based) y compara el resultado
 con el motor de referencia. Asi un desfase de una fila se ve aqui y no en el
 examen.
 """
@@ -30,7 +30,7 @@ def note(ok, msg):
     (PASS if ok else FAIL).append(msg)
 
 
-# ------------------------------------------------------- lectura del .hpprgm
+# --------------------------------------------------- lectura del fuente PPL
 def parse_matrix(txt):
     rows = []
     for m in re.finditer(r'\[([^\[\]]+)\]', txt):
@@ -39,7 +39,7 @@ def parse_matrix(txt):
 
 
 def load_ppl(key):
-    path = os.path.join(PPLDIR, 'TDAT_%s.hpprgm' % key)
+    path = os.path.join(PPLDIR, 'TDAT_%s.txt' % key)
     src = io.open(path, encoding='utf-8').read()
     out = {}
     for name in ('ST', 'SP', 'IX', 'IS'):
@@ -223,9 +223,9 @@ def test_merged_matches(subs):
     merged = io.open(mp, encoding='utf-8').read()
     falta = 0
     for f in sorted(os.listdir(PPLDIR)):
-        if not (f.startswith('TDAT_') and f.endswith('.hpprgm')):
+        if not (f.startswith('TDAT_') and f.endswith('.txt')):
             continue
-        if f == 'TDAT_REG.hpprgm':
+        if f == 'TDAT_REG.txt':
             continue
         for line in io.open(os.path.join(PPLDIR, f), encoding='utf-8').read().split(chr(10)):
             if line.startswith('EXPORT') and line not in merged:
@@ -237,12 +237,12 @@ def test_merged_matches(subs):
 def main():
     subs = E.substances()
     files = [f for f in os.listdir(PPLDIR)
-             if f.startswith('TDAT_') and not f.endswith('REG.hpprgm')]
+             if f.startswith('TDAT_') and not f.endswith('REG.txt')]
     if not files:
         print('No hay ficheros generados: ejecuta tools/gen_ppl.py')
         return 1
     for f in sorted(files):
-        key = f[5:-7]
+        key = f[5:-4]
         sub = None
         for s in subs.values():
             if s['key'][:6] == key:

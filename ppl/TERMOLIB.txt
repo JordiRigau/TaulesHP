@@ -26,9 +26,6 @@ EXPORT TST, TSP, TIX, TIS, TMD;
 // minuscula poden xocar amb variables predefinides de Home.
 EXPORT TCUR:=1;       // index de la substancia activa dins TSUBS
 EXPORT TERR:="";      // text de l'ultim error
-EXPORT TS1:={};       // estats desats (proces 1 -> 2). Han de nomes
-EXPORT TS2:={};       // com a LLISTA: si es declaren numero, TS2(5) es llegeix
-                      // com una crida a funcio i no compila.
 
 // camps del formulari. TD1/TD2 son l'index de magnitud triat als
 // desplegables (1=P 2=T 3=x 4=v 5=u 6=h 7=s) i TV1/TV2 el seu valor.

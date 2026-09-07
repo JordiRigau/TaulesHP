@@ -1,13 +1,21 @@
 # Cheat sheet de HP PPL para este proyecto
 
-Solo lo que se usa en `ppl/TERMOLIB.hpprgm` (motor) y `ppl/TERMO.hpprgm` (interfaz). La referencia
+Solo lo que se usa en `ppl/TERMOLIB.txt` (motor) y `ppl/TERMO.txt` (interfaz). La referencia
 oficial mezcla comandos matemáticos con sintaxis de programación y explica mal
 los casos límite, así que esto está ordenado por lo que hace falta aquí.
 
-> **Verifica en el emulador antes de fiarte.** La forma rápida de aprender PPL
-> no es leer el manual entero, sino pegar fragmentos de 5 líneas en el editor
-> del Virtual Calculator y usar los errores del compilador como respuesta. El
-> compilador señala la línea y suele bastar.
+> **Verifica antes de fiarte.** Lo más rápido ya no es pegar fragmentos en el
+> Virtual Calculator: `hpprime lint FICHERO.txt` caza desde el PC lo que el
+> compilador no explica, y `hpprime run` ejecuta el fichero de verdad
+> ([hp-prime-kit](https://github.com/JordiRigau/hp-prime-kit)). Lo que ni uno
+> ni otro ven —dibujo, teclas, tiempos— sigue necesitando la calculadora.
+
+> **La referencia medida está en el kit**, no aquí:
+> [`ppl.md`](https://github.com/JordiRigau/hp-prime-kit/blob/main/docs/reference/ppl.md)
+> (sintaxis y límites),
+> [`interface.md`](https://github.com/JordiRigau/hp-prime-kit/blob/main/docs/reference/interface.md)
+> (pantalla y teclado). Esta página es lo que se usa **en este proyecto**, con
+> las trampas en las que cayó.
 
 ## Fuentes recomendadas
 
@@ -116,7 +124,16 @@ TEXTOUT_P("texto", x, y, fuente, color); // fuente 1..7; color con RGB(r,g,b)
 WAIT(-1);                                // espera tecla y devuelve su código
 ```
 
-`WAIT(-1)` devuelve el código de la tecla: `49` es `1`, `50` es `2` (ASCII).
+`WAIT(-1)` y `GETKEY` devuelven una **posición en la rejilla del teclado, no
+ASCII**: `[Enter]` es **30** y no 13, y el `1` es **42**, no 49. La rejilla va
+de cinco en cinco: fila 0 = `Apps` 0, `Symb` 1, ▲ 2, `Help` 3, `Esc` 4; fila 1
+= `Home` 5, `Plot` 6, ◄ 7, ► 8, `View` 9. Medida tecla a tecla en una G2, en
+[`interface.md`](https://github.com/JordiRigau/hp-prime-kit/blob/main/docs/reference/interface.md#5-the-keyboard).
+
+**Llamar a una función desde Home va sin paréntesis** si no lleva argumentos:
+`TERMO` la ejecuta, `TERMO()` responde *syntax error*. Dentro del fuente PPL
+es al revés: ahí los paréntesis son obligatorios. Es la única regla que no
+coincide entre Home y el fuente, y aparece en cuanto instalas algo.
 
 ## Errores de sintaxis reales (y los que resultaron ser falsos)
 
@@ -184,6 +201,17 @@ Fuentes: [More undocumented programming limitations in the HP Prime](https://www
 | **Nombres de variable** | los globales exportados comparten espacio con Home: usa prefijos (`T…`) para no chocar |
 | **Decimal en el fuente** | el código fuente usa siempre `.`, aunque la calculadora muestre `,` |
 | **Acceso dinámico** | `EXPR("AIGUAST")` devuelve la matriz cuyo nombre se construye al vuelo; se hace **una vez** al cargar sustancia, nunca por elemento |
+| **Orden de compilación** | un programa sólo ve las funciones de otro si se compiló después: `TDAT` → `TERMOLIB` → la app |
+
+> **Un punto abierto.** El kit documenta que **indexar un global declarado en
+> OTRO programa** falla, porque el compilador lee `NOMS(1)` como una llamada a
+> una función `NOMS`, y recomienda copiarlo antes a un local
+> ([`ppl.md` §1](https://github.com/JordiRigau/hp-prime-kit/blob/main/docs/reference/ppl.md)).
+> `TLOAD` hace exactamente eso que no debería funcionar —`TSUBS` se declara en
+> `TDAT` y se indexa desde `TERMOLIB`— y la app funciona en una G2. O la regla
+> es más estrecha de lo que dice, o esta variante en concreto no está probada
+> en hardware. Mientras no se aclare, **si se toca `TLOAD` conviene copiar
+> primero**: `zs := TSUBS; zp := zs(zii);` — cuesta una línea y quita la duda.
 
 ## Patrón de búsqueda binaria usado en el motor
 

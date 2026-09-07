@@ -146,15 +146,13 @@ END;
 // Son 11 linies a proposit: amb interlineat de 17 px des de y=26, l'ultima
 // cau a 196 i el peu a 218. Afegir-ne mes les solaparia.
 EXPORT TAJUT:={
+  "QUINES DUES",
+  "Qualsevol parell de P,T,x,v,u,h,s, pero una",
+  "de les dues ha de ser P o T. El mercuri,",
+  "nomes parells que comencin per T.",
   "TEMPERATURA",
   "Hi ha T [C] i T [K] al desplegable: tria",
   "la que tinguis. Els resultats donen les dues.",
-  "SALT ENTRE ESTATS",
-  "Es recorden els DOS ultims calculs:",
-  "l'anterior es l'estat 1, el nou el 2.",
-  "El menu -> Salt 1->2 resta 2 menys 1 i dona",
-  "dh, du, ds, dv. Calcula primer l'inicial:",
-  "l'ordre decideix el signe.",
   "TECLES:  tecla=formulari   View=menu",
   "         Help=ajuda        Esc=surt"
 };
@@ -259,12 +257,6 @@ BEGIN
                     "cal donar P o T amb una altra magnitud"};
         END;
 
-        // Els dos ultims estats es desen sols, per al salt 1->2.
-        IF zst(8) >= 0 THEN
-          TS1 := TS2;
-          TS2 := zst;
-        END;
-
         zk := TSHOW(zst);
         // Qualsevol tecla torna al formulari (el bucle continua). Nomes
         // tres fan una altra cosa; si algun codi no fos correcte, aquella
@@ -273,46 +265,14 @@ BEGIN
         IF zk == TKESC THEN zgo := 0; END;
         IF zk == TKVIEW THEN
           zopt := 1;
-          IF CHOOSE(zopt, "TERMO", "Nou calcul", "Salt estat 1 -> 2",
-                    "Ajuda", "Sortir") <> 0 THEN
-            IF zopt == 2 THEN TDELTA(); END;
-            IF zopt == 3 THEN TAJUDA(); END;
-            IF zopt == 4 THEN zgo := 0; END;
+          IF CHOOSE(zopt, "TERMO", "Nou calcul", "Ajuda",
+                    "Sortir") <> 0 THEN
+            IF zopt == 2 THEN TAJUDA(); END;
+            IF zopt == 3 THEN zgo := 0; END;
           END;
         END;
       END;
     END;
   END;
   RETURN zst;
-END;
-
-// Comparacio rapida dels dos estats desats (proces 1 -> 2):
-// dona els salts que es demanen sempre en un balanc.
-EXPORT TDELTA()
-BEGIN
-  LOCAL zy, za, zb;
-  // Es copien a locals ABANS d'indexar-les. Indexar directament una variable
-  // global que el compilador no te clar que sigui una llista es llegeix com
-  // una crida a funcio i no compila.
-  za := TS1; zb := TS2;
-  IF SIZE(za) < 9 OR SIZE(zb) < 9 THEN
-    MSGBOX("Calcula DOS estats amb TERMO() i torna a provar.");
-    RETURN 0;
-  END;
-  RECT();
-  TEXTOUT_P("SALT DEL ESTAT 1 AL 2", 4, 2, 3, RGB(0,0,180));
-  TEXTOUT_P("1:  T=" + TDEC(za(1),2) + "   P=" + TSIG(za(2),5) +
-            "   h=" + TDEC(za(5),2), 4, 26, 2);
-  TEXTOUT_P("2:  T=" + TDEC(zb(1),2) + "   P=" + TSIG(zb(2),5) +
-            "   h=" + TDEC(zb(5),2), 4, 44, 2);
-  zy := 68;
-  TEXTOUT_P("dh = " + TDEC(zb(5)-za(5),2) + " kJ/kg", 4, zy, 3); zy := zy + 25;
-  TEXTOUT_P("du = " + TDEC(zb(4)-za(4),2) + " kJ/kg", 4, zy, 3); zy := zy + 25;
-  TEXTOUT_P("ds = " + TDEC(zb(6)-za(6),4) + " kJ/kgK", 4, zy, 3); zy := zy + 25;
-  TEXTOUT_P("dv = " + TSIG(zb(3)-za(3),5) + " m3/kg", 4, zy, 3); zy := zy + 25;
-  TEXTOUT_P("dT = " + TDEC(zb(1)-za(1),2), 4, zy, 3); zy := zy + 25;
-  TEXTOUT_P("dP = " + TSIG(zb(2)-za(2),5) + " MPa", 4, zy, 3);
-  TEXTOUT_P("Prem una tecla per tornar", 4, 220, 2);
-  TPAUSE();
-  RETURN 1;
 END;

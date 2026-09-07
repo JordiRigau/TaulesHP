@@ -1,0 +1,74 @@
+// ===================================================================
+// TAULES  -  programa de l'App  (HP Prime G2)
+//
+// Aixo NO es un programa del Program Catalog: es el programa intern de
+// l'app en blanc anomenada TAULES. Es crea des de la calculadora amb
+//    [Apps] -> tecla (Save) -> Base App: None -> nom: TAULES
+// i despres s'hi enganxa aquest text.
+//
+// L'app nomes es un llancador: el motor de taules (TERMOLIB) segueix sent
+// un programa global i les seves funcions exportades es veuen des d'aqui.
+// Per aixo l'app es diu TAULES i no TERMO: dos simbols globals amb el
+// mateix nom xocarien.
+//
+// Dins hi ha tres pantalles, i s'hi entra pel menu de botons (MENU.txt):
+// les taules de substancies (TERMO) i les dues de metodes generalitzats
+// (GENER). Els generalitzats no porten cap taula de dades: surten de
+// l'equacio de Lee-Kesler, aixi que viuen dins de l'app i prou.
+//
+// Guany real: obrir-la son 2 pulsacions ([Apps] + tocar la icona) en
+// comptes de [Shift][Program] + navegar + [Enter].
+// ===================================================================
+
+// S'executa en engegar l'app: entra al menu dels tres botons.
+EXPORT START()
+BEGIN
+  TMENU();
+END;
+
+// La tecla [Num] tambe hi entra: es la mes gran i facil de trobar.
+EXPORT Num()
+BEGIN
+  TMENU();
+END;
+
+// [Shift][Apps] mostra aquesta nota. Info() nomes admet PRINT.
+EXPORT Info()
+BEGIN
+  LOCAL zi;
+  // Recorre la MATEIXA llista que dibuixa el [Help] del menu, per no tenir
+  // dos textos d'ajuda que se separin amb el temps. Info() nomes admet PRINT.
+  PRINT();
+  PRINT("TAULES - termodinamica");
+  PRINT("");
+  FOR zi FROM 1 TO SIZE(TMAJUT) DO
+    PRINT(TMAJUT(zi));
+  END;
+END;
+
+// Torna a deixar-ho tot com al principi.
+EXPORT RESET()
+BEGIN
+  TCUR := 1;
+  TD1 := 1;
+  TD2 := 6;
+  TV1 := 0;
+  TV2 := 0;
+  // Les constants dels generalitzats tambe: una Tc vella d'un altre problema
+  // dona un resultat resolt i equivocat, que no avisa de res.
+  TGTC := 300;
+  TGPC := 5;
+  TGW := 0;
+  TGCPA := 40;
+  TGCPB := 0;
+  TGMM := 0;
+  TGSUB := 1;
+  TGV1 := 0;
+  TMDOWN := 1;
+  TLOAD(TCUR);
+END;
+
+// No hi ha blocs VIEW a proposit. START() engega TMENU(), que es queda amb
+// el teclat mentre dura, aixi que les tecles de vista no arriben mai a
+// l'app com a ganxos: cada pantalla les llegeix ella mateixa (qualsevol
+// tecla torna al formulari, [View] obre el menu, [Help] l'ajuda, [Esc] surt).

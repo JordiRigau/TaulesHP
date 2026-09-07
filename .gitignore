@@ -11,11 +11,22 @@ work_probs.txt
 data/
 
 # ficheros PPL que llevan los datos dentro
-ppl/TDAT_*.hpprgm
+ppl/TDAT_*.txt
 ppl/compacte/TDAT.txt
+# la variante de 1 elemento lleva los datos dentro: mismo motivo que TDAT
+ppl/compacte/TAULES_APP_TOT.txt
 
-# ppl/txt/ son copias exactas de ppl/*.hpprgm, generadas
-ppl/txt/
+# binarios .hpprgm y .hpappdir generados por tools/build_hp.py
+ppl/build/
+
+# ---- guia del estudiante ---------------------------------------------
+# Las capturas y las paginas sueltas las rehace tools/gen_guia.py en dos
+# segundos. El PDF SI se versiona: es lo que se le pasa al estudiante, y
+# quien lo reciba no tiene por que poder generarlo.
+docs/guia/img/
+# El volcado del texto tampoco: no hay nada que lo regenere, asi que
+# versionarlo es garantizar que un dia diga lo que la guia ya no dice.
+docs/guia/TEXT.txt
 
 # ---- python ----------------------------------------------------------
 __pycache__/
